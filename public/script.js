@@ -86,9 +86,14 @@ form.addEventListener('submit', async (event) => {
             throw new Error('魔法咒语格式不正确呢~ 😢');
         }
         
-        // 显示结果
+        // 立即显示工作流结果
         displayResults(data);
-        
+
+        // 异步生成文档下载链接
+        if (data.infoJson && data.infoJson.response_data) {
+            generateDocumentAsync(data.infoJson.response_data);
+        }
+
     } catch (error) {
         console.error('💔 魔法施展失败:', error);
         showError(`魔法失败了呢~ ${error.message} 😢`);
@@ -130,6 +135,9 @@ function displayResults(data) {
     } else {
         infoJsonContainer.textContent = '暂时没有魔法详情哦~ ✨';
     }
+
+    // 添加文档生成状态区域
+    addDocumentGenerationStatus();
     
     // 显示结果区域
     resultsSection.style.display = 'block';
@@ -161,6 +169,15 @@ function hideError() {
 // 隐藏结果
 function hideResults() {
     resultsSection.style.display = 'none';
+    // 清除之前的下载区域和状态区域
+    const existingDownloadSection = document.querySelector('.download-section');
+    const existingStatusSection = document.querySelector('.document-status-section');
+    if (existingDownloadSection) {
+        existingDownloadSection.remove();
+    }
+    if (existingStatusSection) {
+        existingStatusSection.remove();
+    }
 }
 
 // 输入框焦点效果
@@ -183,11 +200,89 @@ document.addEventListener('keydown', (event) => {
     }
 });
 
+// 添加文档生成状态区域
+function addDocumentGenerationStatus() {
+    const statusSection = document.createElement('div');
+    statusSection.className = 'document-status-section';
+    statusSection.id = 'document-status';
+    statusSection.innerHTML = `
+        <h3 class="status-title">📄 文档生成状态</h3>
+        <div class="status-content">
+            <div class="status-indicator">
+                <span class="status-icon">⏳</span>
+                <span class="status-text">正在生成魔法文档...</span>
+            </div>
+            <div class="status-progress">
+                <div class="progress-bar"></div>
+            </div>
+        </div>
+    `;
+
+    // 添加到结果区域
+    resultsSection.appendChild(statusSection);
+}
+
+// 异步生成文档
+async function generateDocumentAsync(workflowData) {
+    const statusSection = document.getElementById('document-status');
+    const statusIcon = statusSection.querySelector('.status-icon');
+    const statusText = statusSection.querySelector('.status-text');
+
+    try {
+        statusText.textContent = '正在调用 Google Apps Script...';
+
+        const response = await fetch('/api/generate-document', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                workflowData: workflowData
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        // 更新状态为成功
+        statusIcon.textContent = '✅';
+        statusText.textContent = '文档生成成功！';
+
+        // 添加下载按钮
+        const downloadHtml = `
+            <div class="download-section">
+                <p>您的魔法文档已经准备好了！✨</p>
+                <a href="${result.downloadUrl}"
+                   class="download-btn"
+                   download="${result.fileName}"
+                   target="_blank">
+                    📄 下载魔法文档
+                </a>
+                <p class="download-info">
+                    文档 ID: ${result.docId}<br>
+                    文件大小: ${(result.fileSize / 1024).toFixed(1)} KB<br>
+                    生成时间: ${new Date(result.timestamp).toLocaleString()}
+                </p>
+            </div>
+        `;
+
+        statusSection.querySelector('.status-content').innerHTML += downloadHtml;
+
+    } catch (error) {
+        console.error('文档生成失败:', error);
+        statusIcon.textContent = '❌';
+        statusText.textContent = '文档生成失败，请稍后重试';
+    }
+}
+
 // 页面加载完成后的初始化
 document.addEventListener('DOMContentLoaded', () => {
     // 聚焦到输入框
     userInput.focus();
-    
+
     // 添加一些视觉效果
     setTimeout(() => {
         document.body.classList.add('loaded');

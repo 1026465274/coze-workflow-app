@@ -123,8 +123,8 @@ export default async function handler(req, res) {
             dataKeys: cozeData ? Object.keys(cozeData) : []
         });
 
-        // 返回结果给前端
-        return res.status(200).json({
+        // 立即返回工作流结果给前端，让用户先看到内容
+        const workflowResult = {
             success: true,
             outData: finalResult || '处理完成',
             infoJson: {
@@ -135,7 +135,64 @@ export default async function handler(req, res) {
                 processing_time: Date.now(),
                 api_method: 'stream'
             }
-        });
+        };
+
+        // 异步处理文档生成（不阻塞响应）
+        if (cozeData && (cozeData.infoJson || cozeData.info || cozeData.result)) {
+            // 使用 setTimeout 异步处理，不阻塞当前响应
+            setTimeout(async () => {
+                try {
+                    console.log('开始异步处理文档生成...');
+
+                    // 调用 Google Apps Script
+                    const googleAppsScriptURL = 'https://script.google.com/macros/s/AKfycbw44ekOAjkT0xc1ZkQhiIQowZRot_cGTsKd4Z6dVUATM8ROGQMvue3rAWueqb7WEzmlEw/exec';
+
+                    const gasResponse = await fetch(googleAppsScriptURL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            data: cozeData.infoJson || cozeData.info || cozeData.result || cozeData,
+                            source: 'coze-workflow',
+                            timestamp: new Date().toISOString()
+                        })
+                    });
+
+                    if (gasResponse.ok) {
+                        const gasData = await gasResponse.json();
+                        const docId = gasData.docId || gasData.documentId || gasData.id;
+
+                        if (docId) {
+                            console.log('Google Apps Script 成功，docId:', docId);
+
+                            // 调用下载 API
+                            const downloadResponse = await fetch(`${req.headers.origin || 'https://workflow.lilingbo.top'}/api/download`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    docId: docId,
+                                    fileName: `workflow_result_${Date.now()}.docx`
+                                })
+                            });
+
+                            if (downloadResponse.ok) {
+                                const downloadData = await downloadResponse.json();
+                                console.log('文档下载链接生成成功:', downloadData.downloadUrl);
+                                // 这里可以通过 WebSocket 或其他方式通知前端，但现在先记录日志
+                            }
+                        }
+                    }
+                } catch (asyncError) {
+                    console.error('异步文档处理错误:', asyncError);
+                }
+            }, 0);
+        }
+
+        // 立即返回工作流结果
+        return res.status(200).json(workflowResult);
 
     } catch (error) {
         console.error('服务器错误:', error);
