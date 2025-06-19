@@ -63,7 +63,7 @@ form.addEventListener('submit', async (event) => {
             };
         } else {
             // 生产环境：调用真实 API
-            const response = await fetch('/api/run-workflow', {
+            const response = await fetch('https://api.coze.cn/v1/workflow/run', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
