@@ -74,22 +74,48 @@ export default async function handler(req, res) {
             apiKeyPrefix: COZE_API_KEY.substring(0, 10) + '...'
         });
 
-        // 调用 Coze 工作流 API
-        const cozeResponse = await apiClient.workflows.runs.create({
+        // 调用 Coze 工作流 API（添加超时处理）
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('API 调用超时')), 8000); // 8秒超时
+        });
+
+        // 尝试使用流式 API（根据官方文档）
+        const apiPromise = apiClient.workflows.runs.stream({
             workflow_id: COZE_WORKFLOW_ID,
             parameters: {
                 input: input.trim()
             }
         });
 
-        console.log('Coze API 响应 (SDK):', {
+        const cozeResponse = await Promise.race([apiPromise, timeoutPromise]);
+
+        console.log('Coze API 响应 (流式 SDK):', {
             success: true,
             hasData: !!cozeResponse,
-            responseKeys: cozeResponse ? Object.keys(cozeResponse) : []
+            responseType: typeof cozeResponse
         });
 
-        // 提取响应数据
-        const cozeData = cozeResponse;
+        // 处理流式响应
+        let cozeData = {};
+        let finalResult = '';
+
+        if (cozeResponse && typeof cozeResponse[Symbol.asyncIterator] === 'function') {
+            // 处理流式响应
+            for await (const chunk of cozeResponse) {
+                console.log('收到流式数据块:', chunk);
+                if (chunk.data) {
+                    finalResult += chunk.data;
+                }
+                if (chunk.event === 'done') {
+                    cozeData = chunk;
+                    break;
+                }
+            }
+        } else {
+            // 非流式响应
+            cozeData = cozeResponse;
+            finalResult = cozeData.data || cozeData.output || cozeData.result || '处理完成';
+        }
         
         console.log('Coze API 响应:', {
             success: true,
@@ -100,19 +126,29 @@ export default async function handler(req, res) {
         // 返回结果给前端
         return res.status(200).json({
             success: true,
-            outData: cozeData.data || cozeData.output || cozeData.result || '处理完成',
+            outData: finalResult || '处理完成',
             infoJson: {
                 timestamp: new Date().toISOString(),
                 workflow_id: COZE_WORKFLOW_ID,
                 input_length: input.length,
                 response_data: cozeData,
-                processing_time: Date.now()
+                processing_time: Date.now(),
+                api_method: 'stream'
             }
         });
 
     } catch (error) {
         console.error('服务器错误:', error);
-        
+
+        // 特殊处理超时错误
+        if (error.message === 'API 调用超时') {
+            return res.status(408).json({
+                error: 'Request timeout',
+                message: 'API 调用超时，请稍后重试',
+                details: '工作流处理时间过长，已超过 8 秒限制'
+            });
+        }
+
         return res.status(500).json({
             error: 'Internal server error',
             message: '服务器内部错误，请稍后重试',
