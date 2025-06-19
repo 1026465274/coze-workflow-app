@@ -120,9 +120,10 @@
             
             document.getElementById('current-url').textContent = url;
             
-            const isLocalDev = hostname === 'localhost' || 
+            const isLocalDev = hostname === 'localhost' ||
                               hostname === '127.0.0.1' ||
-                              port === '3000';
+                              hostname.includes('localhost') ||
+                              (port && ['3000', '3001', '8080', '5000'].includes(port));
             
             const envStatus = document.getElementById('env-status');
             const envResult = document.getElementById('env-result');
@@ -151,9 +152,10 @@
                 const testInput = '这是一个测试愿望，用于验证魔法功能是否正常工作~ ✨';
                 
                 // 检测环境
-                const isLocalDev = window.location.hostname === 'localhost' || 
+                const isLocalDev = window.location.hostname === 'localhost' ||
                                   window.location.hostname === '127.0.0.1' ||
-                                  window.location.port === '3000';
+                                  window.location.hostname.includes('localhost') ||
+                                  (window.location.port && ['3000', '3001', '8080', '5000'].includes(window.location.port));
                 
                 let response, data;
                 

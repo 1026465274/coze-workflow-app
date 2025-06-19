@@ -33,7 +33,8 @@ form.addEventListener('submit', async (event) => {
         // 检测是否在本地开发环境
         const isLocalDev = window.location.hostname === 'localhost' ||
                           window.location.hostname === '127.0.0.1' ||
-                          window.location.port === '3000';
+                          window.location.hostname.includes('localhost') ||
+                          (window.location.port && ['3000', '3001', '8080', '5000'].includes(window.location.port));
 
         if (isLocalDev) {
             // 本地开发模式：使用模拟数据

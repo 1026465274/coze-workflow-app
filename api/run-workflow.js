@@ -1,4 +1,6 @@
 // Vercel Serverless Function for Coze Workflow API Proxy
+import { CozeAPI } from '@coze/api';
+
 export default async function handler(req, res) {
     // 设置 CORS 头
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,6 +27,14 @@ export default async function handler(req, res) {
         const COZE_WORKFLOW_ID = process.env.COZE_WORKFLOW_ID;
 
         // 验证环境变量
+        console.log('环境变量检查:', {
+            hasApiKey: !!COZE_API_KEY,
+            apiKeyLength: COZE_API_KEY ? COZE_API_KEY.length : 0,
+            apiKeyPrefix: COZE_API_KEY ? COZE_API_KEY.substring(0, 10) + '...' : 'undefined',
+            hasWorkflowId: !!COZE_WORKFLOW_ID,
+            workflowId: COZE_WORKFLOW_ID
+        });
+
         if (!COZE_API_KEY) {
             console.error('COZE_API_KEY 环境变量未设置');
             return res.status(500).json({
@@ -52,51 +62,34 @@ export default async function handler(req, res) {
             });
         }
 
-        // 构建 Coze API 请求
-        const cozeApiUrl = 'https://api.coze.cn/v1/workflow/run';
-        
-        const requestBody = {
+        // 初始化 Coze API 客户端
+        const apiClient = new CozeAPI({
+            token: COZE_API_KEY,
+            baseURL: 'https://api.coze.cn'
+        });
+
+        console.log('调用 Coze API (使用官方 SDK):', {
+            workflow_id: COZE_WORKFLOW_ID,
+            input_length: input.length,
+            apiKeyPrefix: COZE_API_KEY.substring(0, 10) + '...'
+        });
+
+        // 调用 Coze 工作流 API
+        const cozeResponse = await apiClient.workflows.runs.create({
             workflow_id: COZE_WORKFLOW_ID,
             parameters: {
                 input: input.trim()
             }
-        };
-
-        console.log('调用 Coze API:', {
-            url: cozeApiUrl,
-            workflow_id: COZE_WORKFLOW_ID,
-            input_length: input.length
         });
 
-        // 调用 Coze API
-        const cozeResponse = await fetch(cozeApiUrl, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${COZE_API_KEY}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
+        console.log('Coze API 响应 (SDK):', {
+            success: true,
+            hasData: !!cozeResponse,
+            responseKeys: cozeResponse ? Object.keys(cozeResponse) : []
         });
 
-        // 检查响应状态
-        if (!cozeResponse.ok) {
-            const errorText = await cozeResponse.text();
-            console.error('Coze API 错误:', {
-                status: cozeResponse.status,
-                statusText: cozeResponse.statusText,
-                body: errorText
-            });
-
-            return res.status(cozeResponse.status).json({
-                error: 'Coze API error',
-                message: `Coze API 返回错误: ${cozeResponse.status} ${cozeResponse.statusText}`,
-                details: errorText
-            });
-        }
-
-        // 解析响应
-        const cozeData = await cozeResponse.json();
+        // 提取响应数据
+        const cozeData = cozeResponse;
         
         console.log('Coze API 响应:', {
             success: true,
