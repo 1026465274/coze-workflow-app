@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coze Workflow Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">Coze 魔法工作流</h1>
+            <p class="subtitle">让 AI 为你实现梦想</p>
+        </header>
+
+        <main class="main-content">
+            <form id="workflow-form" class="form">
+                <div class="input-section">
+                    <label for="user-input" class="input-label">告诉我你的愿望</label>
+                    <textarea
+                        id="user-input"
+                        class="input-field"
+                        placeholder="在这里写下你想要实现的梦想吧~ ✨"
+                        rows="6"
+                        required
+                    ></textarea>
+                </div>
+
+                <button type="submit" id="submit-btn" class="submit-btn">
+                    <span class="btn-text">施展魔法</span>
+                    <div class="loading-spinner" style="display: none;"></div>
+                </button>
+            </form>
+
+            <div class="results-section" id="results-section" style="display: none;">
+                <div class="result-container">
+                    <h3 class="result-title">魔法结果</h3>
+                    <div id="outData-container" class="result-content">
+                        <!-- outData 将在这里显示 -->
+                    </div>
+                </div>
+
+                <div class="result-container">
+                    <h3 class="result-title">魔法详情</h3>
+                    <div id="infoJson-container" class="result-content json-content">
+                        <pre><code id="info-json-display">
+                            <!-- infoJson 将在这里显示 -->
+                        </code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="error-message" id="error-message" style="display: none;">
+                <div class="error-content">
+                    <h3>出现错误</h3>
+                    <p id="error-text"></p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2024 Coze 魔法工作流. 用爱与科技创造奇迹</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

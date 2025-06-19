@@ -1,0 +1,434 @@
+/* 重置和基础样式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Roboto Mono', monospace;
+    background: linear-gradient(135deg, #ffeef8 0%, #f8e8ff 30%, #e8f4ff 70%, #fff0f8 100%);
+    color: #4a4a4a;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+}
+
+/* 添加可爱的背景装饰 */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image:
+        radial-gradient(circle at 20% 20%, rgba(255, 182, 193, 0.3) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(221, 160, 221, 0.3) 0%, transparent 50%),
+        radial-gradient(circle at 40% 60%, rgba(173, 216, 230, 0.3) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* 容器布局 */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+/* 头部样式 */
+.header {
+    text-align: center;
+    margin-bottom: 40px;
+    animation: fadeInDown 1s ease-out;
+}
+
+.title {
+    font-size: 3rem;
+    font-weight: 700;
+    background: linear-gradient(45deg, #ff69b4, #ff1493, #da70d6, #ff69b4);
+    background-size: 300% 300%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradientShift 3s ease-in-out infinite;
+    margin-bottom: 10px;
+    letter-spacing: 2px;
+    text-shadow: 0 2px 10px rgba(255, 105, 180, 0.3);
+    position: relative;
+}
+
+.title::after {
+    content: '✨';
+    position: absolute;
+    right: -40px;
+    top: 0;
+    animation: sparkle 2s ease-in-out infinite;
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    color: #8b4b8b;
+    font-weight: 300;
+    position: relative;
+}
+
+.subtitle::before {
+    content: '🌸';
+    margin-right: 8px;
+}
+
+.subtitle::after {
+    content: '🌸';
+    margin-left: 8px;
+}
+
+/* 主要内容区域 */
+.main-content {
+    width: 100%;
+    max-width: 800px;
+    animation: fadeInUp 1s ease-out 0.3s both;
+}
+
+/* 表单样式 */
+.form {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(255, 182, 193, 0.6);
+    border-radius: 25px;
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 15px 35px rgba(255, 105, 180, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.form::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent, rgba(255, 182, 193, 0.1), transparent);
+    animation: shimmer 3s linear infinite;
+    pointer-events: none;
+}
+
+.input-section {
+    margin-bottom: 25px;
+}
+
+.input-label {
+    display: block;
+    font-size: 1.1rem;
+    color: #d63384;
+    margin-bottom: 10px;
+    font-weight: 500;
+    position: relative;
+}
+
+.input-label::before {
+    content: '💕';
+    margin-right: 8px;
+}
+
+.input-field {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid rgba(255, 182, 193, 0.6);
+    border-radius: 20px;
+    padding: 15px 20px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 1rem;
+    color: #4a4a4a;
+    resize: vertical;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 2px 5px rgba(255, 182, 193, 0.1);
+}
+
+.input-field:focus {
+    outline: none;
+    border-color: #ff69b4;
+    box-shadow: 0 0 20px rgba(255, 105, 180, 0.4), inset 0 2px 5px rgba(255, 182, 193, 0.2);
+    background: rgba(255, 255, 255, 1);
+    transform: translateY(-2px);
+}
+
+.input-field::placeholder {
+    color: #b19cd9;
+    font-style: italic;
+}
+
+/* 按钮样式 */
+.submit-btn {
+    width: 100%;
+    background: linear-gradient(45deg, #ff69b4, #ff1493, #da70d6);
+    border: none;
+    border-radius: 25px;
+    padding: 15px 30px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-shadow: 0 8px 25px rgba(255, 105, 180, 0.3);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.submit-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s;
+}
+
+.submit-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 35px rgba(255, 105, 180, 0.4);
+    background: linear-gradient(45deg, #ff1493, #ff69b4, #da70d6);
+}
+
+.submit-btn:hover::before {
+    left: 100%;
+}
+
+.submit-btn:active {
+    transform: translateY(-1px);
+}
+
+.submit-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-text::before {
+    content: '✨ ';
+}
+
+.btn-text::after {
+    content: ' ✨';
+}
+
+/* 加载动画 */
+.loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid transparent;
+    border-top: 2px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 新增动画 */
+@keyframes gradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+@keyframes sparkle {
+    0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    50% { transform: scale(1.2) rotate(180deg); opacity: 0.8; }
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+    100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+}
+
+/* 结果展示区域 */
+.results-section {
+    animation: fadeIn 0.5s ease-out;
+}
+
+.result-container {
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(255, 182, 193, 0.6);
+    border-radius: 20px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 30px rgba(255, 105, 180, 0.2);
+    position: relative;
+}
+
+.result-container::before {
+    content: '🌟';
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    font-size: 1.2rem;
+    animation: sparkle 2s ease-in-out infinite;
+}
+
+.result-title {
+    color: #d63384;
+    font-size: 1.3rem;
+    margin-bottom: 15px;
+    font-weight: 500;
+    position: relative;
+}
+
+.result-title::before {
+    content: '🎀 ';
+    margin-right: 8px;
+}
+
+.result-content {
+    background: rgba(255, 240, 245, 0.8);
+    border-radius: 15px;
+    padding: 20px;
+    border-left: 4px solid #ff69b4;
+    line-height: 1.6;
+    color: #4a4a4a;
+    box-shadow: inset 0 2px 5px rgba(255, 182, 193, 0.1);
+}
+
+.json-content pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.json-content code {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.9rem;
+    color: #6b4c7a;
+}
+
+/* 错误消息样式 */
+.error-message {
+    animation: fadeIn 0.5s ease-out;
+}
+
+.error-content {
+    background: rgba(255, 182, 193, 0.2);
+    border: 2px solid rgba(255, 105, 180, 0.4);
+    border-radius: 20px;
+    padding: 25px;
+    text-align: center;
+    position: relative;
+}
+
+.error-content::before {
+    content: '😢';
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 10px;
+}
+
+.error-content h3 {
+    color: #d63384;
+    margin-bottom: 10px;
+}
+
+.error-content p {
+    color: #8b4b8b;
+}
+
+/* 页脚样式 */
+.footer {
+    margin-top: 40px;
+    text-align: center;
+    color: #8b4b8b;
+    font-size: 0.9rem;
+    position: relative;
+}
+
+.footer::before {
+    content: '💖';
+    margin-right: 8px;
+}
+
+.footer::after {
+    content: '💖';
+    margin-left: 8px;
+}
+
+/* 动画定义 */
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+    
+    .title {
+        font-size: 2rem;
+    }
+    
+    .form {
+        padding: 20px;
+    }
+    
+    .input-field {
+        padding: 12px;
+    }
+    
+    .submit-btn {
+        padding: 12px 25px;
+    }
+}
+
+@media (max-width: 480px) {
+    .title {
+        font-size: 1.5rem;
+    }
+    
+    .subtitle {
+        font-size: 1rem;
+    }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "coze-workflow-app",
+  "version": "1.0.0",
+  "description": "A web form to call Coze workflow API with cyberpunk-style UI",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vercel dev",
+    "dev-simple": "npx serve .",
+    "build": "echo 'No build step required for static site'",
+    "start": "npx serve ."
+  },
+  "keywords": [
+    "coze",
+    "workflow",
+    "api",
+    "cyberpunk",
+    "vercel"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

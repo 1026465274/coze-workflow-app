@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>功能测试页面</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #ffeef8 0%, #f8e8ff 30%, #e8f4ff 70%, #fff0f8 100%);
+            color: #4a4a4a;
+            padding: 20px;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #d63384;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            background: rgba(255, 255, 255, 0.8);
+            border: 2px solid rgba(255, 182, 193, 0.6);
+            border-radius: 20px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 10px 30px rgba(255, 105, 180, 0.2);
+        }
+        .test-section h2 {
+            color: #d63384;
+            margin-bottom: 15px;
+        }
+        .test-section h2::before {
+            content: '🌸 ';
+        }
+        .status {
+            padding: 15px;
+            border-radius: 15px;
+            margin: 10px 0;
+            font-weight: 500;
+        }
+        .success {
+            background: rgba(144, 238, 144, 0.3);
+            border: 2px solid #90EE90;
+            color: #2d5a2d;
+        }
+        .success::before { content: '✨ '; }
+
+        .error {
+            background: rgba(255, 182, 193, 0.3);
+            border: 2px solid #FFB6C1;
+            color: #8b4b8b;
+        }
+        .error::before { content: '😢 '; }
+
+        .info {
+            background: rgba(221, 160, 221, 0.3);
+            border: 2px solid #DDA0DD;
+            color: #6b4c7a;
+        }
+        .info::before { content: '💕 '; }
+
+        button {
+            background: linear-gradient(45deg, #ff69b4, #ff1493, #da70d6);
+            border: none;
+            color: white;
+            padding: 12px 25px;
+            border-radius: 20px;
+            cursor: pointer;
+            margin: 5px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(255, 105, 180, 0.3);
+        }
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255, 105, 180, 0.4);
+        }
+        button::before {
+            content: '✨ ';
+        }
+        pre {
+            background: rgba(255, 240, 245, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #ff69b4;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌸 Coze 魔法工作流 - 功能测试 ✨</h1>
+    
+    <div class="test-section">
+        <h2>魔法环境检测</h2>
+        <div id="env-status" class="status info">正在检测魔法环境...</div>
+        <p>当前魔法门户: <span id="current-url"></span></p>
+        <p>检测结果: <span id="env-result"></span></p>
+    </div>
+
+    <div class="test-section">
+        <h2>魔法测试</h2>
+        <button onclick="testAPI()">测试魔法咒语</button>
+        <div id="api-status" class="status info">点击按钮开始施展测试魔法</div>
+        <pre id="api-result"></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>魔法传送门</h2>
+        <button onclick="window.open('/', '_blank')">进入魔法世界</button>
+        <button onclick="window.open('/LOCAL_DEVELOPMENT.md', '_blank')">查看魔法手册</button>
+    </div>
+
+    <script>
+        // 环境检测
+        function detectEnvironment() {
+            const url = window.location.href;
+            const hostname = window.location.hostname;
+            const port = window.location.port;
+            
+            document.getElementById('current-url').textContent = url;
+            
+            const isLocalDev = hostname === 'localhost' || 
+                              hostname === '127.0.0.1' ||
+                              port === '3000';
+            
+            const envStatus = document.getElementById('env-status');
+            const envResult = document.getElementById('env-result');
+            
+            if (isLocalDev) {
+                envStatus.className = 'status success';
+                envStatus.textContent = '本地魔法练习场';
+                envResult.textContent = '将使用模拟魔法响应 ✨';
+            } else {
+                envStatus.className = 'status info';
+                envStatus.textContent = '真实魔法世界';
+                envResult.textContent = '将调用真实的 Coze 魔法 API 🌟';
+            }
+        }
+
+        // API 测试
+        async function testAPI() {
+            const statusDiv = document.getElementById('api-status');
+            const resultDiv = document.getElementById('api-result');
+            
+            statusDiv.className = 'status info';
+            statusDiv.textContent = '正在施展测试魔法...';
+            resultDiv.textContent = '';
+
+            try {
+                const testInput = '这是一个测试愿望，用于验证魔法功能是否正常工作~ ✨';
+                
+                // 检测环境
+                const isLocalDev = window.location.hostname === 'localhost' || 
+                                  window.location.hostname === '127.0.0.1' ||
+                                  window.location.port === '3000';
+                
+                let response, data;
+                
+                if (isLocalDev) {
+                    // 模拟本地 API 调用
+                    statusDiv.textContent = '正在施展模拟魔法...';
+
+                    // 模拟延迟
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    // 模拟响应
+                    data = {
+                        success: true,
+                        outData: `🌟 模拟魔法输出：${testInput} ✨`,
+                        infoJson: {
+                            timestamp: new Date().toISOString(),
+                            mode: '🌸 测试魔法模式 🌸',
+                            wish_length: testInput.length,
+                            is_test: true,
+                            sparkles: '✨🌟💫⭐'
+                        }
+                    };
+                } else {
+                    // 真实 API 调用
+                    response = await fetch('/api/run-workflow', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            input: testInput
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    data = await response.json();
+                }
+                
+                // 显示成功结果
+                statusDiv.className = 'status success';
+                statusDiv.textContent = '魔法测试成功！';
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `魔法测试失败了呢~ ${error.message}`;
+                resultDiv.textContent = `错误详情:\n${error.stack || error.message}`;
+            }
+        }
+
+        // 页面加载时执行环境检测
+        document.addEventListener('DOMContentLoaded', detectEnvironment);
+    </script>
+</body>
+</html>
