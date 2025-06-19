@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vercel dev",
     "dev-simple": "npx serve .",
-    "build": "echo 'No build step required for static site'",
+    "build": "echo 'Static site - no build needed'",
     "start": "npx serve ."
   },
   "keywords": [
