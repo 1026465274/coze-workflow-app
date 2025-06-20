@@ -52,8 +52,10 @@ form.addEventListener('submit', async (event) => {
         displayResults(data);
 
         // 异步生成文档下载链接
-        if (data.infoJson && data.infoJson.response_data) {
-            generateDocumentAsync(data.infoJson.response_data);
+        if (data.infoJson && (data.infoJson.extracted_infojson || data.infoJson.response_data)) {
+            // 优先使用提取的 infojson，否则使用 response_data
+            const workflowData = data.infoJson.extracted_infojson || data.infoJson.response_data;
+            generateDocumentAsync(workflowData);
         }
 
     } catch (error) {
@@ -81,7 +83,22 @@ function setLoadingState(isLoading) {
 function displayResults(data) {
     // 显示 outData
     if (data.outData !== undefined) {
-        outDataContainer.textContent = data.outData;
+        // 如果 outData 是 JSON 格式的 infojson，美化显示
+        if (data.infoJson && data.infoJson.extracted_infojson && data.outData.includes('{')) {
+            try {
+                const parsedData = JSON.parse(data.outData);
+                outDataContainer.innerHTML = `
+                    <div class="infojson-display">
+                        <h4>📋 提取的信息 (infojson)</h4>
+                        <pre>${JSON.stringify(parsedData, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (e) {
+                outDataContainer.textContent = data.outData;
+            }
+        } else {
+            outDataContainer.textContent = data.outData;
+        }
     } else {
         outDataContainer.textContent = '魔法还在准备中呢~ 🌟';
     }
@@ -89,8 +106,18 @@ function displayResults(data) {
     // 显示 infoJson
     if (data.infoJson) {
         try {
-            const formattedJson = JSON.stringify(data.infoJson, null, 2);
-            infoJsonContainer.textContent = formattedJson;
+            // 如果有提取的 infojson，优先显示
+            if (data.infoJson.extracted_infojson) {
+                const displayData = {
+                    ...data.infoJson,
+                    主要数据: data.infoJson.extracted_infojson
+                };
+                const formattedJson = JSON.stringify(displayData, null, 2);
+                infoJsonContainer.textContent = formattedJson;
+            } else {
+                const formattedJson = JSON.stringify(data.infoJson, null, 2);
+                infoJsonContainer.textContent = formattedJson;
+            }
         } catch (error) {
             infoJsonContainer.textContent = '魔法详情格式化失败了~ 😢';
         }
@@ -327,7 +354,11 @@ async function callDirectCozeAPI(inputValue) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let result = '';
-    let finalData = {};
+    let messageData = null;
+    let infojson = null;
+    let outData = '';
+
+    console.log('开始处理流式响应...');
 
     while (true) {
         const { done, value } = await reader.read();
@@ -339,34 +370,64 @@ async function callDirectCozeAPI(inputValue) {
 
         // 解析 Server-Sent Events
         const lines = chunk.split('\n');
+        let currentEvent = '';
+
         for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                const data = line.substring(6);
-                if (data && data !== '[DONE]') {
+            if (line.startsWith('event: ')) {
+                currentEvent = line.substring(7).trim();
+            } else if (line.startsWith('data: ')) {
+                const dataStr = line.substring(6);
+                if (dataStr && dataStr !== '[DONE]') {
                     try {
-                        const eventData = JSON.parse(data);
-                        if (eventData.event === 'workflow.completed') {
-                            finalData = eventData.data;
+                        const eventData = JSON.parse(dataStr);
+                        console.log('收到事件:', currentEvent, eventData);
+
+                        // 处理 Message 事件
+                        if (currentEvent === 'Message' && eventData.content) {
+                            try {
+                                const contentData = JSON.parse(eventData.content);
+                                console.log('解析 Message 内容:', contentData);
+
+                                if (contentData.infojson) {
+                                    infojson = contentData.infojson;
+                                    console.log('提取到 infojson:', infojson);
+                                }
+
+                                if (contentData.outData) {
+                                    outData = contentData.outData;
+                                }
+
+                                messageData = contentData;
+                            } catch (contentParseError) {
+                                console.warn('解析 Message content 失败:', contentParseError);
+                            }
                         }
                     } catch (e) {
-                        // 忽略解析错误
+                        console.warn('解析事件数据失败:', e);
                     }
                 }
             }
         }
     }
 
+    console.log('流式响应处理完成:', {
+        hasInfojson: !!infojson,
+        hasOutData: !!outData,
+        hasMessageData: !!messageData
+    });
+
     // 返回标准格式
     return {
         success: true,
-        outData: finalData.output || result || '处理完成',
+        outData: outData || JSON.stringify(infojson, null, 2) || '处理完成',
         infoJson: {
             timestamp: new Date().toISOString(),
             workflow_id: workflowId,
             input_length: inputValue.length,
-            response_data: finalData,
+            response_data: infojson || messageData,
             api_method: 'direct_coze_stream',
-            raw_response: result
+            raw_response: result,
+            extracted_infojson: infojson
         }
     };
 }

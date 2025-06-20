@@ -361,6 +361,10 @@
                 const decoder = new TextDecoder();
                 let result = '';
                 let chunks = [];
+                let messageData = null;
+                let infojson = null;
+                let outData = '';
+                let allEvents = [];
 
                 statusDiv.textContent = '正在接收流式数据...';
 
@@ -375,43 +379,77 @@
                     chunks.push(chunk);
                     result += chunk;
 
-                    // 实时显示接收到的数据
-                    resultDiv.textContent = `接收到的数据块:\n${chunks.join('\n---\n')}`;
-
-                    console.log('收到数据块:', chunk);
-                }
-
-                statusDiv.textContent = '流式数据接收完成！';
-                statusDiv.className = 'status success';
-
-                // 尝试解析最终结果
-                try {
-                    // 处理 Server-Sent Events 格式
-                    const lines = result.split('\n');
-                    const events = [];
+                    // 解析 Server-Sent Events
+                    const lines = chunk.split('\n');
+                    let currentEvent = '';
+                    let currentId = '';
 
                     for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const data = line.substring(6);
-                            if (data && data !== '[DONE]') {
+                        if (line.startsWith('id: ')) {
+                            currentId = line.substring(4).trim();
+                        } else if (line.startsWith('event: ')) {
+                            currentEvent = line.substring(7).trim();
+                        } else if (line.startsWith('data: ')) {
+                            const dataStr = line.substring(6);
+                            if (dataStr && dataStr !== '[DONE]') {
                                 try {
-                                    events.push(JSON.parse(data));
+                                    const eventData = JSON.parse(dataStr);
+
+                                    // 记录所有事件
+                                    allEvents.push({
+                                        id: currentId,
+                                        event: currentEvent,
+                                        data: eventData
+                                    });
+
+                                    console.log(`事件 ${currentId} (${currentEvent}):`, eventData);
+
+                                    // 处理 Message 事件
+                                    if (currentEvent === 'Message' && eventData.content) {
+                                        try {
+                                            const contentData = JSON.parse(eventData.content);
+                                            console.log('Message 内容:', contentData);
+
+                                            if (contentData.infojson) {
+                                                infojson = contentData.infojson;
+                                                console.log('提取到 infojson:', infojson);
+                                            }
+
+                                            if (contentData.outData) {
+                                                outData = contentData.outData;
+                                            }
+
+                                            messageData = contentData;
+                                        } catch (contentParseError) {
+                                            console.warn('解析 Message content 失败:', contentParseError);
+                                        }
+                                    }
                                 } catch (e) {
-                                    events.push(data);
+                                    console.warn('解析事件数据失败:', e);
                                 }
                             }
                         }
                     }
 
-                    resultDiv.textContent = JSON.stringify({
-                        raw_response: result,
-                        parsed_events: events,
-                        total_chunks: chunks.length
-                    }, null, 2);
-
-                } catch (parseError) {
-                    resultDiv.textContent = `原始响应:\n${result}`;
+                    // 实时显示处理进度
+                    resultDiv.textContent = `处理中... 已收到 ${allEvents.length} 个事件\n最新事件: ${currentEvent}`;
                 }
+
+                statusDiv.textContent = '流式数据接收完成！';
+                statusDiv.className = 'status success';
+
+                // 显示解析结果
+                const finalResult = {
+                    success: true,
+                    extracted_infojson: infojson,
+                    extracted_outData: outData,
+                    message_data: messageData,
+                    all_events: allEvents,
+                    total_events: allEvents.length,
+                    raw_response: result
+                };
+
+                resultDiv.textContent = JSON.stringify(finalResult, null, 2);
 
                 console.log('Coze API 流式响应完成');
 

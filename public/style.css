@@ -569,6 +569,33 @@ body::before {
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
+/* infojson 显示样式 */
+.infojson-display {
+    background: rgba(240, 255, 240, 0.9);
+    border: 2px solid rgba(144, 238, 144, 0.6);
+    border-radius: 15px;
+    padding: 20px;
+    margin: 10px 0;
+}
+
+.infojson-display h4 {
+    color: #228b22;
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+}
+
+.infojson-display pre {
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(144, 238, 144, 0.4);
+    border-radius: 8px;
+    padding: 15px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
 /* 页脚样式 */
 .footer {
     margin-top: 40px;

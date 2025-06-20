@@ -186,6 +186,8 @@
             <br>
             <label for="workflow-id">Workflow ID:</label>
             <input type="text" id="workflow-id" placeholder="7515309664160399414" style="width: 300px; margin: 5px;">
+            <label for="workflow-input">Workflow input:</label>
+            <input type="text" id="workflow-input" placeholder="" style="width: 300px; margin: 5px;">
         </div>
         <div id="api-status" class="status info">点击按钮开始施展测试魔法</div>
         <pre id="api-result"></pre>
@@ -301,6 +303,7 @@
             const resultDiv = document.getElementById('api-result');
             const token = document.getElementById('coze-token').value;
             const workflowId = document.getElementById('workflow-id').value;
+            const workflowInput = document.getElementById('workflow-input').value;
 
             if (!token) {
                 statusDiv.textContent = '请输入 Coze API Token';
@@ -328,7 +331,8 @@
                     workflow_id: workflowId,
                     parameters: {
                         // 根据您的工作流输入参数调整
-                        input: '这是一个直接测试 Coze 工作流的输入，请生成一个简单的回复'
+                        input: workflowInput ,
+                        getJson: true
                     },
                     // 可选参数
                     stream: true  // 启用流式响应
