@@ -86,6 +86,82 @@
             border-left: 4px solid #ff69b4;
             overflow-x: auto;
         }
+
+        .test-buttons {
+            margin-bottom: 15px;
+        }
+
+        .test-buttons button {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .api-config {
+            background: rgba(240, 248, 255, 0.8);
+            border: 1px solid rgba(173, 216, 230, 0.6);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .api-config label {
+            display: inline-block;
+            width: 120px;
+            font-weight: 500;
+            color: #4682b4;
+        }
+
+        .api-config input {
+            padding: 8px 12px;
+            border: 1px solid rgba(173, 216, 230, 0.8);
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        .api-config input:focus {
+            outline: none;
+            border-color: #4682b4;
+            box-shadow: 0 0 5px rgba(70, 130, 180, 0.3);
+        }
+
+        .test-buttons {
+            margin-bottom: 15px;
+        }
+
+        .test-buttons button {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .api-config {
+            background: rgba(240, 248, 255, 0.8);
+            border: 1px solid rgba(173, 216, 230, 0.6);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .api-config label {
+            display: inline-block;
+            width: 120px;
+            font-weight: 500;
+            color: #4682b4;
+        }
+
+        .api-config input {
+            padding: 8px 12px;
+            border: 1px solid rgba(173, 216, 230, 0.8);
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        .api-config input:focus {
+            outline: none;
+            border-color: #4682b4;
+            box-shadow: 0 0 5px rgba(70, 130, 180, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -100,7 +176,17 @@
 
     <div class="test-section">
         <h2>魔法测试</h2>
-        <button onclick="testAPI()">测试魔法咒语</button>
+        <div class="test-buttons">
+            <button onclick="testAPI()">测试代理 API</button>
+            <button onclick="testDirectCozeAPI()">直接测试 Coze API</button>
+        </div>
+        <div class="api-config">
+            <label for="coze-token">Coze API Token:</label>
+            <input type="password" id="coze-token" placeholder="pat_your_token_here" style="width: 300px; margin: 5px;">
+            <br>
+            <label for="workflow-id">Workflow ID:</label>
+            <input type="text" id="workflow-id" placeholder="7515309664160399414" style="width: 300px; margin: 5px;">
+        </div>
         <div id="api-status" class="status info">点击按钮开始施展测试魔法</div>
         <pre id="api-result"></pre>
     </div>
@@ -120,9 +206,10 @@
             
             document.getElementById('current-url').textContent = url;
             
-            const isLocalDev = hostname === 'localhost' || 
+            const isLocalDev = hostname === 'localhost' ||
                               hostname === '127.0.0.1' ||
-                              port === '3000';
+                              hostname.includes('localhost') ||
+                              (port && ['3000', '3001', '8080', '5000'].includes(port));
             
             const envStatus = document.getElementById('env-status');
             const envResult = document.getElementById('env-result');
@@ -151,9 +238,10 @@
                 const testInput = '这是一个测试愿望，用于验证魔法功能是否正常工作~ ✨';
                 
                 // 检测环境
-                const isLocalDev = window.location.hostname === 'localhost' || 
+                const isLocalDev = window.location.hostname === 'localhost' ||
                                   window.location.hostname === '127.0.0.1' ||
-                                  window.location.port === '3000';
+                                  window.location.hostname.includes('localhost') ||
+                                  (window.location.port && ['3000', '3001', '8080', '5000'].includes(window.location.port));
                 
                 let response, data;
                 
@@ -204,6 +292,179 @@
                 statusDiv.className = 'status error';
                 statusDiv.textContent = `魔法测试失败了呢~ ${error.message}`;
                 resultDiv.textContent = `错误详情:\n${error.stack || error.message}`;
+            }
+        }
+
+        // 直接测试 Coze API - 根据官方文档
+        async function testDirectCozeAPI() {
+            const statusDiv = document.getElementById('api-status');
+            const resultDiv = document.getElementById('api-result');
+            const token = document.getElementById('coze-token').value;
+            const workflowId = document.getElementById('workflow-id').value;
+
+            if (!token) {
+                statusDiv.textContent = '请输入 Coze API Token';
+                statusDiv.className = 'status error';
+                return;
+            }
+
+            if (!workflowId) {
+                statusDiv.textContent = '请输入 Workflow ID';
+                statusDiv.className = 'status error';
+                return;
+            }
+
+            statusDiv.textContent = '正在直接调用 Coze 工作流流式 API...';
+            statusDiv.className = 'status info';
+            resultDiv.textContent = '';
+
+            try {
+                console.log('开始直接调用 Coze 工作流流式 API');
+                console.log('Token:', token.substring(0, 10) + '...');
+                console.log('Workflow ID:', workflowId);
+
+                // 根据官方文档：工作流流式运行 API
+                const requestBody = {
+                    workflow_id: workflowId,
+                    parameters: {
+                        // 根据您的工作流输入参数调整
+                        input: '这是一个直接测试 Coze 工作流的输入，请生成一个简单的回复'
+                    },
+                    // 可选参数
+                    stream: true  // 启用流式响应
+                };
+
+                console.log('请求体:', JSON.stringify(requestBody, null, 2));
+
+                // 使用工作流流式运行端点
+                const response = await fetch('https://api.coze.cn/v1/workflow/stream_run', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/event-stream'  // 流式响应
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                console.log('Coze API 响应状态:', response.status);
+                console.log('响应头:', Object.fromEntries(response.headers.entries()));
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('API 错误响应:', errorText);
+                    throw new Error(`Coze API 错误: ${response.status} ${response.statusText}\n响应内容: ${errorText}`);
+                }
+
+                // 处理流式响应
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let result = '';
+                let chunks = [];
+
+                statusDiv.textContent = '正在接收流式数据...';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) {
+                        break;
+                    }
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    chunks.push(chunk);
+                    result += chunk;
+
+                    // 实时显示接收到的数据
+                    resultDiv.textContent = `接收到的数据块:\n${chunks.join('\n---\n')}`;
+
+                    console.log('收到数据块:', chunk);
+                }
+
+                statusDiv.textContent = '流式数据接收完成！';
+                statusDiv.className = 'status success';
+
+                // 尝试解析最终结果
+                try {
+                    // 处理 Server-Sent Events 格式
+                    const lines = result.split('\n');
+                    const events = [];
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.substring(6);
+                            if (data && data !== '[DONE]') {
+                                try {
+                                    events.push(JSON.parse(data));
+                                } catch (e) {
+                                    events.push(data);
+                                }
+                            }
+                        }
+                    }
+
+                    resultDiv.textContent = JSON.stringify({
+                        raw_response: result,
+                        parsed_events: events,
+                        total_chunks: chunks.length
+                    }, null, 2);
+
+                } catch (parseError) {
+                    resultDiv.textContent = `原始响应:\n${result}`;
+                }
+
+                console.log('Coze API 流式响应完成');
+
+            } catch (error) {
+                console.error('直接调用 Coze API 失败:', error);
+                statusDiv.textContent = `直接调用 Coze API 失败: ${error.message}`;
+                statusDiv.className = 'status error';
+                resultDiv.textContent = `错误详情:\n${error.stack || error.message}`;
+
+                // 尝试非流式 API
+                await tryNonStreamCozeAPI(token, workflowId, statusDiv, resultDiv);
+            }
+        }
+
+        // 尝试非流式 Coze API
+        async function tryNonStreamCozeAPI(token, workflowId, statusDiv, resultDiv) {
+            try {
+                statusDiv.textContent = '尝试非流式 Coze API...';
+
+                // 方法二：尝试标准的工作流运行端点
+                const response = await fetch('https://api.coze.cn/v1/workflow/run', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        workflow_id: workflowId,
+                        parameters: {
+                            input: '非流式端点测试输入'
+                        }
+                    })
+                });
+
+                console.log('非流式端点响应状态:', response.status);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    statusDiv.textContent = '非流式端点调用成功！';
+                    statusDiv.className = 'status success';
+                    resultDiv.textContent = JSON.stringify(data, null, 2);
+                    return;
+                }
+
+                const errorText = await response.text();
+                throw new Error(`非流式 API 也失败了: ${response.status} - ${errorText}`);
+
+            } catch (altError) {
+                console.error('非流式端点也失败:', altError);
+                statusDiv.textContent = `所有 Coze API 端点都失败了: ${altError.message}`;
+                statusDiv.className = 'status error';
+                resultDiv.textContent = `最终错误:\n${altError.message}`;
             }
         }
 

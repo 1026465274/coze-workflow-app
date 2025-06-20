@@ -33,7 +33,32 @@
                     <span class="btn-text">施展魔法</span>
                     <div class="loading-spinner" style="display: none;"></div>
                 </button>
+
+                <div class="api-toggle">
+                    <button type="button" onclick="toggleDirectAPI()" class="toggle-btn">
+                        🔧 直接调用 Coze API
+                    </button>
+                </div>
             </form>
+
+            <!-- API 配置区域 -->
+            <div class="api-config-section" id="api-config" style="display: none;">
+                <h3>🔧 直接调用 Coze API 配置</h3>
+                <div class="config-inputs">
+                    <div class="input-row">
+                        <label for="coze-token">API Token:</label>
+                        <input type="password" id="coze-token" placeholder="pat_your_token_here">
+                    </div>
+                    <div class="input-row">
+                        <label for="workflow-id">Workflow ID:</label>
+                        <input type="text" id="workflow-id" placeholder="7515309664160399414">
+                    </div>
+                    <div class="config-buttons">
+                        <button type="button" onclick="toggleDirectAPI()" class="secondary-btn">取消</button>
+                        <button type="button" onclick="saveDirectAPIConfig()" class="primary-btn">保存并使用</button>
+                    </div>
+                </div>
+            </div>
 
             <div class="results-section" id="results-section" style="display: none;">
                 <div class="result-container">

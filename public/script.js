@@ -30,43 +30,17 @@ form.addEventListener('submit', async (event) => {
     
     try {
         let data;
-  
-            // 真实 API 调用
-            // 配置 API 基础 URL
-            let API_BASE_URL = '';
 
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                // 本地开发：检查是否有本地 Vercel Dev 服务器运行
-                if (window.location.port === '3000') {
-                    API_BASE_URL = '';  // 使用本地 Vercel Dev 服务器 (localhost:3000)
-                    console.log('使用本地 Vercel Dev 服务器');
-                } else {
-                    API_BASE_URL = 'https://workflow.lilingbo.top';  // 使用线上 API
-                    console.log('本地开发，调用线上 API');
-                }
-            } else {
-                API_BASE_URL = '';  // 生产环境使用相对路径
-                console.log('生产环境，使用相对路径');
-            }
+        // 检查是否使用直接 Coze API
+        const useDirectAPI = localStorage.getItem('useDirectCozeAPI') === 'true';
 
-            const apiUrl = `${API_BASE_URL}/api/run-workflow`;
-            console.log('调用真实 API:', apiUrl);
-
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    input: inputValue
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            data = await response.json();
+        if (useDirectAPI) {
+            // 直接调用 Coze API
+            data = await callDirectCozeAPI(inputValue);
+        } else {
+            // 使用代理 API
+            data = await callProxyAPI(inputValue);
+        }
    
         
         // 检查返回数据格式
@@ -274,10 +248,204 @@ async function generateDocumentAsync(workflowData) {
     }
 }
 
+// 调用代理 API
+async function callProxyAPI(inputValue) {
+    // 配置 API 基础 URL
+    let API_BASE_URL = '';
+
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        // 本地开发：检查是否有本地 Vercel Dev 服务器运行
+        if (window.location.port === '3000') {
+            API_BASE_URL = '';  // 使用本地 Vercel Dev 服务器 (localhost:3000)
+            console.log('使用本地 Vercel Dev 服务器');
+        } else {
+            API_BASE_URL = 'https://workflow.lilingbo.top';  // 使用线上 API
+            console.log('本地开发，调用线上 API');
+        }
+    } else {
+        API_BASE_URL = '';  // 生产环境使用相对路径
+        console.log('生产环境，使用相对路径');
+    }
+
+    const apiUrl = `${API_BASE_URL}/api/run-workflow`;
+    console.log('调用代理 API:', apiUrl);
+
+    const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            input: inputValue
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+}
+
+// 直接调用 Coze API
+async function callDirectCozeAPI(inputValue) {
+    const token = localStorage.getItem('cozeApiToken');
+    const workflowId = localStorage.getItem('cozeWorkflowId');
+
+    if (!token || !workflowId) {
+        throw new Error('请先配置 Coze API Token 和 Workflow ID');
+    }
+
+    console.log('直接调用 Coze API:', {
+        workflowId,
+        tokenPrefix: token.substring(0, 10) + '...'
+    });
+
+    // 使用工作流流式运行端点
+    const response = await fetch('https://api.coze.cn/v1/workflow/stream_run', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+        },
+        body: JSON.stringify({
+            workflow_id: workflowId,
+            parameters: {
+                input: inputValue
+            },
+            stream: true
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Coze API 错误: ${response.status} ${response.statusText}\n${errorText}`);
+    }
+
+    // 处理流式响应
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let result = '';
+    let finalData = {};
+
+    while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        result += chunk;
+
+        // 解析 Server-Sent Events
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+            if (line.startsWith('data: ')) {
+                const data = line.substring(6);
+                if (data && data !== '[DONE]') {
+                    try {
+                        const eventData = JSON.parse(data);
+                        if (eventData.event === 'workflow.completed') {
+                            finalData = eventData.data;
+                        }
+                    } catch (e) {
+                        // 忽略解析错误
+                    }
+                }
+            }
+        }
+    }
+
+    // 返回标准格式
+    return {
+        success: true,
+        outData: finalData.output || result || '处理完成',
+        infoJson: {
+            timestamp: new Date().toISOString(),
+            workflow_id: workflowId,
+            input_length: inputValue.length,
+            response_data: finalData,
+            api_method: 'direct_coze_stream',
+            raw_response: result
+        }
+    };
+}
+
+// 切换直接 API 模式
+function toggleDirectAPI() {
+    const configSection = document.getElementById('api-config');
+    const isVisible = configSection.style.display !== 'none';
+
+    if (isVisible) {
+        configSection.style.display = 'none';
+    } else {
+        configSection.style.display = 'block';
+        // 加载已保存的配置
+        const savedToken = localStorage.getItem('cozeApiToken');
+        const savedWorkflowId = localStorage.getItem('cozeWorkflowId');
+
+        if (savedToken) {
+            document.getElementById('coze-token').value = savedToken;
+        }
+        if (savedWorkflowId) {
+            document.getElementById('workflow-id').value = savedWorkflowId;
+        }
+    }
+}
+
+// 保存直接 API 配置
+function saveDirectAPIConfig() {
+    const token = document.getElementById('coze-token').value.trim();
+    const workflowId = document.getElementById('workflow-id').value.trim();
+
+    if (!token) {
+        alert('请输入 Coze API Token');
+        return;
+    }
+
+    if (!workflowId) {
+        alert('请输入 Workflow ID');
+        return;
+    }
+
+    // 保存配置
+    localStorage.setItem('cozeApiToken', token);
+    localStorage.setItem('cozeWorkflowId', workflowId);
+    localStorage.setItem('useDirectCozeAPI', 'true');
+
+    // 隐藏配置区域
+    document.getElementById('api-config').style.display = 'none';
+
+    // 更新按钮文本
+    const toggleBtn = document.querySelector('.toggle-btn');
+    toggleBtn.textContent = '🔧 使用代理 API';
+    toggleBtn.onclick = () => {
+        localStorage.setItem('useDirectCozeAPI', 'false');
+        toggleBtn.textContent = '🔧 直接调用 Coze API';
+        toggleBtn.onclick = toggleDirectAPI;
+        alert('已切换到代理 API 模式');
+    };
+
+    alert('配置已保存！现在将直接调用 Coze API');
+}
+
 // 页面加载完成后的初始化
 document.addEventListener('DOMContentLoaded', () => {
     // 聚焦到输入框
     userInput.focus();
+
+    // 检查是否使用直接 API
+    const useDirectAPI = localStorage.getItem('useDirectCozeAPI') === 'true';
+    if (useDirectAPI) {
+        const toggleBtn = document.querySelector('.toggle-btn');
+        toggleBtn.textContent = '🔧 使用代理 API';
+        toggleBtn.onclick = () => {
+            localStorage.setItem('useDirectCozeAPI', 'false');
+            toggleBtn.textContent = '🔧 直接调用 Coze API';
+            toggleBtn.onclick = toggleDirectAPI;
+            alert('已切换到代理 API 模式');
+        };
+    }
 
     // 添加一些视觉效果
     setTimeout(() => {

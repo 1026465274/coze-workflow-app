@@ -465,6 +465,110 @@ body::before {
     100% { width: 100%; }
 }
 
+/* API 配置区域样式 */
+.api-toggle {
+    text-align: center;
+    margin-top: 15px;
+}
+
+.toggle-btn {
+    background: rgba(173, 216, 230, 0.8);
+    color: #4682b4;
+    border: 1px solid rgba(173, 216, 230, 0.6);
+    padding: 8px 16px;
+    border-radius: 15px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.toggle-btn:hover {
+    background: rgba(173, 216, 230, 1);
+    transform: translateY(-2px);
+}
+
+.api-config-section {
+    background: rgba(240, 248, 255, 0.9);
+    border: 2px solid rgba(173, 216, 230, 0.6);
+    border-radius: 20px;
+    padding: 25px;
+    margin: 20px 0;
+    box-shadow: 0 10px 30px rgba(173, 216, 230, 0.2);
+    animation: fadeIn 0.5s ease-out;
+}
+
+.api-config-section h3 {
+    color: #4682b4;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.config-inputs {
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.input-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.input-row label {
+    display: inline-block;
+    width: 120px;
+    font-weight: 500;
+    color: #4682b4;
+}
+
+.input-row input {
+    flex: 1;
+    padding: 10px 15px;
+    border: 1px solid rgba(173, 216, 230, 0.8);
+    border-radius: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.input-row input:focus {
+    outline: none;
+    border-color: #4682b4;
+    box-shadow: 0 0 10px rgba(70, 130, 180, 0.3);
+}
+
+.config-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.secondary-btn {
+    background: rgba(128, 128, 128, 0.8);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.primary-btn {
+    background: linear-gradient(45deg, #4682b4, #87ceeb);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.secondary-btn:hover, .primary-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
 /* 页脚样式 */
 .footer {
     margin-top: 40px;
