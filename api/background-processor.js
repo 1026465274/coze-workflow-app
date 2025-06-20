@@ -49,12 +49,21 @@ export default async function handler(req, res) {
         jobId: jobId
     });
 
-    // 异步处理长时间任务
-    console.log(`[${jobId}] 启动异步处理任务...`);
-    processLongRunningTask(jobId, input).catch(error => {
-        console.error(`[${jobId}] ❌ 后台处理异常:`, error);
+    // 直接调用后台任务处理函数（HTTP 调用模式）
+    console.log(`[${jobId}] HTTP 模式：直接执行后台处理任务...`);
+    try {
+        await runBackgroundTask(jobId, input);
+        console.log(`[${jobId}] HTTP 模式：后台任务执行完成`);
+    } catch (error) {
+        console.error(`[${jobId}] ❌ HTTP 模式：后台处理异常:`, error);
         console.error(`[${jobId}] 错误堆栈:`, error.stack);
-    });
+    }
+}
+
+// 导出的后台任务处理函数 - 供其他模块调用
+export async function runBackgroundTask(jobId, input) {
+    console.log(`[${jobId}] ===== runBackgroundTask 函数开始执行 =====`);
+    return await processLongRunningTask(jobId, input);
 }
 
 // 长时间运行的任务处理函数

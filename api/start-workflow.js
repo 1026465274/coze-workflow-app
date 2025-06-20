@@ -1,5 +1,6 @@
 // Vercel Serverless Function - Start Async Workflow
 import { Redis } from '@upstash/redis';
+import { runBackgroundTask } from './background-processor.js';
 
 // Initialize Redis
 const redis = Redis.fromEnv();
@@ -57,25 +58,16 @@ export default async function handler(req, res) {
         });
         console.log(`[${jobId}] 初始状态保存成功`);
 
-        // 立即启动后台处理，不等待结果
-        const backgroundProcessUrl = `${req.headers.origin || 'https://workflow.lilingbo.top'}/api/background-processor`;
-        console.log(`[${jobId}] 准备启动后台处理器:`, backgroundProcessUrl);
+        // 直接调用后台处理函数，让 Vercel 自动处理后台执行
+        console.log(`[${jobId}] 准备直接调用后台处理函数...`);
 
-        // 使用 fetch 调用后台处理器，确保完全异步
-        fetch(backgroundProcessUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                jobId: jobId,
-                input: input.trim()
-            })
-        }).then(() => {
-            console.log(`[${jobId}] 后台处理器启动请求发送成功`);
-        }).catch(error => {
-            console.error(`[${jobId}] 启动后台处理失败:`, error);
+        // 关键：不使用 await，让函数在后台异步执行
+        // Vercel 会自动识别这是一个后台任务
+        runBackgroundTask(jobId, input.trim()).catch(error => {
+            console.error(`[${jobId}] 后台任务执行失败:`, error);
         });
+
+        console.log(`[${jobId}] 后台任务已启动，立即返回响应`);
 
         // 立即返回任务 ID
         return res.status(202).json({
