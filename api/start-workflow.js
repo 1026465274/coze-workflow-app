@@ -41,14 +41,14 @@ export default async function handler(req, res) {
         console.log(`[${jobId}] 创建新的工作流任务`);
 
         // 在 Redis 中创建初始状态记录
-        await redis.set(`job:${jobId}`, JSON.stringify({
+        await redis.set(`job:${jobId}`, {
             status: 'pending',
             progress: 0,
             message: '任务已创建，等待处理...',
             input: input.trim(),
             createdTime: new Date().toISOString(),
             jobId: jobId
-        }));
+        });
 
         // 立即启动后台处理，不等待结果
         // 使用 fetch 调用后台处理器，确保完全异步

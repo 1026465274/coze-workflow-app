@@ -52,23 +52,23 @@ async function processLongRunningTask(jobId, input) {
         console.log(`[${jobId}] 开始后台处理...`);
         
         // 更新状态为处理中
-        await redis.set(`job:${jobId}`, JSON.stringify({
+        await redis.set(`job:${jobId}`, {
             status: 'processing',
             progress: 10,
             message: '正在调用 Coze 工作流...',
             startTime: new Date().toISOString()
-        }));
+        });
 
         // 执行 Coze 工作流
         const workflowResult = await executeCozeWorkflow(input, jobId);
 
         // 更新进度
-        await redis.set(`job:${jobId}`, JSON.stringify({
+        await redis.set(`job:${jobId}`, {
             status: 'processing',
             progress: 60,
             message: '工作流完成，开始生成文档...',
             workflowResult: workflowResult
-        }));
+        });
 
         // 处理文档生成
         let documentResult = null;
@@ -76,11 +76,11 @@ async function processLongRunningTask(jobId, input) {
             try {
                 documentResult = await generateDocument(workflowResult.infoJson.extracted_infojson, jobId);
 
-                await redis.set(`job:${jobId}`, JSON.stringify({
+                await redis.set(`job:${jobId}`, {
                     status: 'processing',
                     progress: 90,
                     message: '文档生成完成，正在整理结果...'
-                }));
+                });
             } catch (docError) {
                 console.error(`[${jobId}] 文档生成失败:`, docError);
                 // 文档生成失败不影响主流程
@@ -93,13 +93,13 @@ async function processLongRunningTask(jobId, input) {
             documentResult
         };
 
-        await redis.set(`job:${jobId}`, JSON.stringify({
+        await redis.set(`job:${jobId}`, {
             status: 'completed',
             progress: 100,
             message: '任务完成',
             result: finalResult,
             completedTime: new Date().toISOString()
-        }));
+        });
 
         console.log(`[${jobId}] 后台处理完成`);
 
@@ -107,13 +107,13 @@ async function processLongRunningTask(jobId, input) {
         console.error(`[${jobId}] 后台处理失败:`, error);
         
         try {
-            await redis.set(`job:${jobId}`, JSON.stringify({
+            await redis.set(`job:${jobId}`, {
                 status: 'failed',
                 progress: 0,
                 message: `处理失败: ${error.message}`,
                 error: error.message,
                 failedTime: new Date().toISOString()
-            }));
+            });
         } catch (redisError) {
             console.error('更新失败状态时出错:', redisError);
         }
@@ -155,11 +155,11 @@ async function executeCozeWorkflow(input, jobId) {
             
             // 更新进度
             progress = Math.min(progress + 5, 50);
-            await redis.set(`job:${jobId}`, JSON.stringify({
+            await redis.set(`job:${jobId}`, {
                 status: 'processing',
                 progress: progress,
                 message: `正在处理 Coze 响应... (${chunk.event})`
-            }));
+            });
 
             if (chunk.event === 'Message' && chunk.data && chunk.data.content) {
                 try {
@@ -201,11 +201,11 @@ async function executeCozeWorkflow(input, jobId) {
 async function generateDocument(workflowData, jobId) {
     console.log(`[${jobId}] 开始生成文档...`);
 
-    await redis.set(`job:${jobId}`, JSON.stringify({
+    await redis.set(`job:${jobId}`, {
         status: 'processing',
         progress: 70,
         message: '正在调用 Google Apps Script...'
-    }));
+    });
 
     const googleAppsScriptURL = 'https://script.google.com/macros/s/AKfycbw44ekOAjkT0xc1ZkQhiIQowZRot_cGTsKd4Z6dVUATM8ROGQMvue3rAWueqb7WEzmlEw/exec';
     
@@ -234,11 +234,11 @@ async function generateDocument(workflowData, jobId) {
 
     console.log(`[${jobId}] Google Apps Script 成功，docId:`, docId);
 
-    await redis.set(`job:${jobId}`, JSON.stringify({
+    await redis.set(`job:${jobId}`, {
         status: 'processing',
         progress: 80,
         message: '正在生成下载链接...'
-    }));
+    });
 
     const downloadResponse = await fetch('https://workflow.lilingbo.top/api/download', {
         method: 'POST',

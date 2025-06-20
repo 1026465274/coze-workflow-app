@@ -39,8 +39,7 @@ export default async function handler(req, res) {
         console.log(`查询任务状态: ${jobId}`);
 
         // 从 Redis 中查询任务状态
-        const jobDataStr = await redis.get(`job:${jobId}`);
-        const jobData = jobDataStr ? JSON.parse(jobDataStr) : null;
+        const jobData = await redis.get(`job:${jobId}`);
 
         if (!jobData) {
             return res.status(404).json({
