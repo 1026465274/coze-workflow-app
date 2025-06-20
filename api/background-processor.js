@@ -60,9 +60,53 @@ export default async function handler(req, res) {
     }
 }
 
+// Redis 连接测试函数
+async function testRedisConnection(jobId) {
+    try {
+        console.log(`[${jobId}] 测试 Redis 连接...`);
+
+        const testKey = `test:${jobId}`;
+        const testValue = { test: true, timestamp: new Date().toISOString() };
+
+        // 测试写入
+        const setOperation = redis.set(testKey, testValue);
+        const setTimeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Redis SET 超时')), 3000);
+        });
+
+        await Promise.race([setOperation, setTimeoutPromise]);
+        console.log(`[${jobId}] ✅ Redis 写入测试成功`);
+
+        // 测试读取
+        const getOperation = redis.get(testKey);
+        const getTimeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Redis GET 超时')), 3000);
+        });
+
+        const retrievedValue = await Promise.race([getOperation, getTimeoutPromise]);
+        console.log(`[${jobId}] ✅ Redis 读取测试成功:`, !!retrievedValue);
+
+        // 清理测试数据
+        redis.del(testKey).catch(err => console.warn(`[${jobId}] 清理测试数据失败:`, err));
+
+        return true;
+    } catch (error) {
+        console.error(`[${jobId}] ❌ Redis 连接测试失败:`, error);
+        return false;
+    }
+}
+
 // 导出的后台任务处理函数 - 供其他模块调用
 export async function runBackgroundTask(jobId, input) {
     console.log(`[${jobId}] ===== runBackgroundTask 函数开始执行 =====`);
+
+    // 首先测试 Redis 连接
+    const redisOk = await testRedisConnection(jobId);
+    if (!redisOk) {
+        console.error(`[${jobId}] Redis 连接失败，无法继续执行`);
+        throw new Error('Redis 连接失败');
+    }
+
     return await processLongRunningTask(jobId, input);
 }
 
@@ -80,15 +124,34 @@ async function processLongRunningTask(jobId, input) {
 
         console.log(`[${jobId}] 开始更新 Redis 状态为 processing...`);
 
-        // 更新状态为处理中
-        await redis.set(`job:${jobId}`, {
-            status: 'processing',
-            progress: 10,
-            message: '正在调用 Coze 工作流...',
-            startTime: new Date().toISOString()
-        });
+        // 更新状态为处理中 - 添加超时保护
+        try {
+            const redisOperation = redis.set(`job:${jobId}`, {
+                status: 'processing',
+                progress: 10,
+                message: '正在调用 Coze 工作流...',
+                startTime: new Date().toISOString()
+            });
 
-        console.log(`[${jobId}] Redis 状态更新成功，开始执行工作流...`);
+            // 添加 10 秒超时保护
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Redis 操作超时')), 10000);
+            });
+
+            await Promise.race([redisOperation, timeoutPromise]);
+            console.log(`[${jobId}] ✅ Redis 状态更新成功，开始执行工作流...`);
+
+        } catch (redisError) {
+            console.error(`[${jobId}] ❌ Redis 状态更新失败:`, redisError);
+            console.error(`[${jobId}] Redis 错误详情:`, {
+                errorMessage: redisError.message,
+                errorStack: redisError.stack,
+                errorName: redisError.name
+            });
+
+            // Redis 失败不应该阻止整个流程，继续执行
+            console.log(`[${jobId}] Redis 更新失败，但继续执行工作流...`);
+        }
 
         // 执行 Coze 工作流
         console.log(`[${jobId}] 开始调用 executeCozeWorkflow 函数...`);
@@ -100,15 +163,26 @@ async function processLongRunningTask(jobId, input) {
             outDataLength: workflowResult?.outData?.length || 0
         });
 
-        // 更新进度
+        // 更新进度 - 添加超时保护
         console.log(`[${jobId}] 更新进度到 60%...`);
-        await redis.set(`job:${jobId}`, {
-            status: 'processing',
-            progress: 60,
-            message: '工作流完成，开始生成文档...',
-            workflowResult: workflowResult
-        });
-        console.log(`[${jobId}] 进度更新完成，准备处理文档生成...`);
+        try {
+            const updateOperation = redis.set(`job:${jobId}`, {
+                status: 'processing',
+                progress: 60,
+                message: '工作流完成，开始生成文档...',
+                workflowResult: workflowResult
+            });
+
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Redis 更新超时')), 5000);
+            });
+
+            await Promise.race([updateOperation, timeoutPromise]);
+            console.log(`[${jobId}] ✅ 进度更新完成，准备处理文档生成...`);
+        } catch (updateError) {
+            console.error(`[${jobId}] ❌ 进度更新失败:`, updateError.message);
+            console.log(`[${jobId}] 继续处理文档生成...`);
+        }
 
         // 处理文档生成
         let documentResult = null;
@@ -154,13 +228,25 @@ async function processLongRunningTask(jobId, input) {
             documentHasDownloadUrl: !!documentResult?.downloadUrl
         });
 
-        await redis.set(`job:${jobId}`, {
-            status: 'completed',
-            progress: 100,
-            message: '任务完成',
-            result: finalResult,
-            completedTime: new Date().toISOString()
-        });
+        // 最终状态更新 - 添加超时保护
+        try {
+            const finalUpdateOperation = redis.set(`job:${jobId}`, {
+                status: 'completed',
+                progress: 100,
+                message: '任务完成',
+                result: finalResult,
+                completedTime: new Date().toISOString()
+            });
+
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('最终状态更新超时')), 5000);
+            });
+
+            await Promise.race([finalUpdateOperation, timeoutPromise]);
+            console.log(`[${jobId}] ✅ 最终状态更新成功`);
+        } catch (finalUpdateError) {
+            console.error(`[${jobId}] ❌ 最终状态更新失败:`, finalUpdateError.message);
+        }
 
         console.log(`[${jobId}] ===== 后台处理完成 =====`);
 
