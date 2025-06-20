@@ -14,7 +14,8 @@ const errorText = document.getElementById('error-text');
 let currentJobId = null;
 let statusCheckInterval = null;
 let statusCheckCount = 0;
-const MAX_STATUS_CHECKS = 120; // 最多检查2分钟（120次 * 1.5秒）
+const MAX_STATUS_CHECKS = 24; // 最多检查4分钟（24次 * 10秒）
+const POLLING_INTERVAL = 10000; // 10秒轮询间隔
 
 // 表单提交事件监听
 form.addEventListener('submit', async (event) => {
@@ -103,7 +104,6 @@ async function startAsyncWorkflow(inputValue) {
         showTaskStatus({
             status: 'pending',
             message: '任务已启动，正在后台处理中...',
-            progress: 0,
             jobId: currentJobId
         });
 
@@ -342,7 +342,7 @@ function startStatusPolling() {
                 clearInterval(statusCheckInterval);
                 statusCheckInterval = null;
                 setLoadingState(false);
-                showError('任务处理超时，请稍后重试或联系管理员 ⏰');
+                showError('任务处理超时（4分钟），请稍后重试或联系管理员 ⏰');
                 return;
             }
 
@@ -351,7 +351,7 @@ function startStatusPolling() {
             console.error('状态检查失败:', error);
             // 继续轮询，不中断
         }
-    }, 1500); // 每1.5秒检查一次，更及时的反馈
+    }, POLLING_INTERVAL); // 每10秒检查一次
 }
 
 // 检查任务状态
@@ -407,13 +407,11 @@ function showTaskStatus(statusData) {
                 <span class="status-icon">⏳</span>
                 <span class="status-text">${statusData.message}</span>
             </div>
-            <div class="status-progress">
-                <div class="progress-bar" style="width: ${statusData.progress}%"></div>
-            </div>
             <div class="status-details">
                 <p>任务 ID: ${statusData.jobId}</p>
                 <p>状态: <span class="status-badge ${statusData.status}">${getStatusText(statusData.status)}</span></p>
-                <p>进度: ${statusData.progress}%</p>
+                <p>检查间隔: 每10秒</p>
+                <p>超时时间: 4分钟</p>
             </div>
         </div>
     `;
@@ -436,7 +434,6 @@ function updateTaskStatus(statusData) {
 
     const statusIcon = statusSection.querySelector('.status-icon');
     const statusText = statusSection.querySelector('.status-text');
-    const progressBar = statusSection.querySelector('.progress-bar');
     const statusBadge = statusSection.querySelector('.status-badge');
 
     // 更新图标
@@ -455,9 +452,8 @@ function updateTaskStatus(statusData) {
             break;
     }
 
-    // 更新文本和进度
+    // 更新文本和状态
     statusText.textContent = statusData.message;
-    progressBar.style.width = `${statusData.progress}%`;
     statusBadge.textContent = getStatusText(statusData.status);
     statusBadge.className = `status-badge ${statusData.status}`;
 

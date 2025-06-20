@@ -634,21 +634,7 @@ body::before {
     flex: 1;
 }
 
-.task-status-section .status-progress {
-    width: 100%;
-    height: 8px;
-    background: rgba(255, 215, 0, 0.3);
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 15px;
-}
-
-.task-status-section .progress-bar {
-    height: 100%;
-    background: linear-gradient(90deg, #ffd700, #ff8c00);
-    transition: width 0.3s ease;
-    border-radius: 4px;
-}
+/* 移除进度条相关样式，因为无法准确显示进度 */
 
 .status-details {
     background: rgba(255, 255, 255, 0.7);
