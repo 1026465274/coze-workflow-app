@@ -13,6 +13,8 @@ const errorText = document.getElementById('error-text');
 // 当前任务状态
 let currentJobId = null;
 let statusCheckInterval = null;
+let statusCheckCount = 0;
+const MAX_STATUS_CHECKS = 120; // 最多检查2分钟（120次 * 1.5秒）
 
 // 表单提交事件监听
 form.addEventListener('submit', async (event) => {
@@ -49,7 +51,7 @@ form.addEventListener('submit', async (event) => {
             }
             setLoadingState(false);
         } else {
-            // 使用异步工作流模式
+            // 使用异步工作流模式（修复超时问题）
             await startAsyncWorkflow(inputValue);
         }
 
@@ -75,7 +77,7 @@ async function startAsyncWorkflow(inputValue) {
             }
         }
 
-        const startUrl = `${API_BASE_URL}/api/start-workflow-simple`;
+        const startUrl = `${API_BASE_URL}/api/start-workflow`;
         console.log('调用启动 API:', startUrl);
 
         const response = await fetch(startUrl, {
@@ -100,12 +102,12 @@ async function startAsyncWorkflow(inputValue) {
         // 显示任务启动状态
         showTaskStatus({
             status: 'pending',
-            message: '任务已启动，正在处理中...',
+            message: '任务已启动，正在后台处理中...',
             progress: 0,
             jobId: currentJobId
         });
 
-        // 开始轮询状态
+        // 立即开始轮询状态（更频繁的检查）
         startStatusPolling();
 
     } catch (error) {
@@ -329,14 +331,27 @@ function startStatusPolling() {
         clearInterval(statusCheckInterval);
     }
 
+    statusCheckCount = 0; // 重置计数器
+
     statusCheckInterval = setInterval(async () => {
         try {
+            statusCheckCount++;
+
+            // 超时保护
+            if (statusCheckCount > MAX_STATUS_CHECKS) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+                setLoadingState(false);
+                showError('任务处理超时，请稍后重试或联系管理员 ⏰');
+                return;
+            }
+
             await checkJobStatus();
         } catch (error) {
             console.error('状态检查失败:', error);
             // 继续轮询，不中断
         }
-    }, 2000); // 每2秒检查一次
+    }, 1500); // 每1.5秒检查一次，更及时的反馈
 }
 
 // 检查任务状态

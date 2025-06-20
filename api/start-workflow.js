@@ -78,16 +78,22 @@ export default async function handler(req, res) {
             jobId: jobId
         });
 
-        // 非阻塞地启动后台处理
-        // 使用 setTimeout 确保不阻塞响应
-        setTimeout(async () => {
-            try {
-                await processWorkflow(jobId, input.trim());
-            } catch (error) {
-                console.error(`[${jobId}] 后台处理失败:`, error);
-                // 错误已经在 processWorkflow 中处理了
-            }
-        }, 0);
+        // 立即启动后台处理，不等待结果
+        // 使用 fetch 调用后台处理器，确保完全异步
+        const backgroundProcessUrl = `${req.headers.origin || 'https://workflow.lilingbo.top'}/api/background-processor`;
+
+        fetch(backgroundProcessUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                jobId: jobId,
+                input: input.trim()
+            })
+        }).catch(error => {
+            console.error(`[${jobId}] 启动后台处理失败:`, error);
+        });
 
         // 立即返回任务 ID
         return res.status(202).json({
