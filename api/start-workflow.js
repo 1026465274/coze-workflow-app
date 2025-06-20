@@ -1,34 +1,8 @@
 // Vercel Serverless Function - Start Async Workflow
+import { Redis } from '@upstash/redis';
 
-// 初始化 KV 存储
-let kv = null;
-let kvInitialized = false;
-
-async function initKV() {
-    if (kvInitialized) return kv;
-
-    try {
-        const kvModule = await import('@vercel/kv');
-        kv = kvModule.kv;
-        console.log('Vercel KV 初始化成功');
-    } catch (error) {
-        console.warn('Vercel KV 不可用，使用内存存储作为降级方案');
-        // 内存存储降级方案
-        const memoryStore = new Map();
-        kv = {
-            set: async (key, value) => {
-                memoryStore.set(key, value);
-                return 'OK';
-            },
-            get: async (key) => {
-                return memoryStore.get(key) || null;
-            }
-        };
-    }
-
-    kvInitialized = true;
-    return kv;
-}
+// Initialize Redis
+const redis = Redis.fromEnv();
 
 export default async function handler(req, res) {
     // 设置 CORS 头
@@ -66,16 +40,15 @@ export default async function handler(req, res) {
 
         console.log(`[${jobId}] 创建新的工作流任务`);
 
-        // 初始化 KV 并创建初始状态记录
-        const kvStore = await initKV();
-        await kvStore.set(`job:${jobId}`, {
+        // 在 Redis 中创建初始状态记录
+        await redis.set(`job:${jobId}`, JSON.stringify({
             status: 'pending',
             progress: 0,
             message: '任务已创建，等待处理...',
             input: input.trim(),
             createdTime: new Date().toISOString(),
             jobId: jobId
-        });
+        }));
 
         // 立即启动后台处理，不等待结果
         // 使用 fetch 调用后台处理器，确保完全异步

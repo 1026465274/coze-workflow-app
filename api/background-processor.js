@@ -1,35 +1,9 @@
 // Vercel Serverless Function - Background Processor for Long-Running Tasks
 import { CozeAPI } from '@coze/api';
+import { Redis } from '@upstash/redis';
 
-// 初始化 KV 存储
-let kv = null;
-let kvInitialized = false;
-
-async function initKV() {
-    if (kvInitialized) return kv;
-    
-    try {
-        const kvModule = await import('@vercel/kv');
-        kv = kvModule.kv;
-        console.log('Vercel KV 初始化成功');
-    } catch (error) {
-        console.warn('Vercel KV 不可用，使用内存存储作为降级方案');
-        // 内存存储降级方案
-        const memoryStore = new Map();
-        kv = {
-            set: async (key, value) => {
-                memoryStore.set(key, value);
-                return 'OK';
-            },
-            get: async (key) => {
-                return memoryStore.get(key) || null;
-            }
-        };
-    }
-    
-    kvInitialized = true;
-    return kv;
-}
+// Initialize Redis
+const redis = Redis.fromEnv();
 
 export default async function handler(req, res) {
     // 设置 CORS 头
@@ -73,41 +47,40 @@ export default async function handler(req, res) {
 
 // 长时间运行的任务处理函数
 async function processLongRunningTask(jobId, input) {
-    const kvStore = await initKV();
     
     try {
         console.log(`[${jobId}] 开始后台处理...`);
         
         // 更新状态为处理中
-        await kvStore.set(`job:${jobId}`, {
+        await redis.set(`job:${jobId}`, JSON.stringify({
             status: 'processing',
             progress: 10,
             message: '正在调用 Coze 工作流...',
             startTime: new Date().toISOString()
-        });
+        }));
 
         // 执行 Coze 工作流
-        const workflowResult = await executeCozeWorkflow(input, jobId, kvStore);
-        
+        const workflowResult = await executeCozeWorkflow(input, jobId);
+
         // 更新进度
-        await kvStore.set(`job:${jobId}`, {
+        await redis.set(`job:${jobId}`, JSON.stringify({
             status: 'processing',
             progress: 60,
             message: '工作流完成，开始生成文档...',
             workflowResult: workflowResult
-        });
+        }));
 
         // 处理文档生成
         let documentResult = null;
         if (workflowResult.infoJson && workflowResult.infoJson.extracted_infojson) {
             try {
-                documentResult = await generateDocument(workflowResult.infoJson.extracted_infojson, jobId, kvStore);
-                
-                await kvStore.set(`job:${jobId}`, {
+                documentResult = await generateDocument(workflowResult.infoJson.extracted_infojson, jobId);
+
+                await redis.set(`job:${jobId}`, JSON.stringify({
                     status: 'processing',
                     progress: 90,
                     message: '文档生成完成，正在整理结果...'
-                });
+                }));
             } catch (docError) {
                 console.error(`[${jobId}] 文档生成失败:`, docError);
                 // 文档生成失败不影响主流程
@@ -120,13 +93,13 @@ async function processLongRunningTask(jobId, input) {
             documentResult
         };
 
-        await kvStore.set(`job:${jobId}`, {
+        await redis.set(`job:${jobId}`, JSON.stringify({
             status: 'completed',
             progress: 100,
             message: '任务完成',
             result: finalResult,
             completedTime: new Date().toISOString()
-        });
+        }));
 
         console.log(`[${jobId}] 后台处理完成`);
 
@@ -134,21 +107,21 @@ async function processLongRunningTask(jobId, input) {
         console.error(`[${jobId}] 后台处理失败:`, error);
         
         try {
-            await kvStore.set(`job:${jobId}`, {
+            await redis.set(`job:${jobId}`, JSON.stringify({
                 status: 'failed',
                 progress: 0,
                 message: `处理失败: ${error.message}`,
                 error: error.message,
                 failedTime: new Date().toISOString()
-            });
-        } catch (kvError) {
-            console.error('更新失败状态时出错:', kvError);
+            }));
+        } catch (redisError) {
+            console.error('更新失败状态时出错:', redisError);
         }
     }
 }
 
 // 执行 Coze 工作流
-async function executeCozeWorkflow(input, jobId, kvStore) {
+async function executeCozeWorkflow(input, jobId) {
     const COZE_API_KEY = process.env.COZE_API_KEY;
     const COZE_WORKFLOW_ID = process.env.COZE_WORKFLOW_ID;
 
@@ -182,11 +155,11 @@ async function executeCozeWorkflow(input, jobId, kvStore) {
             
             // 更新进度
             progress = Math.min(progress + 5, 50);
-            await kvStore.set(`job:${jobId}`, {
+            await redis.set(`job:${jobId}`, JSON.stringify({
                 status: 'processing',
                 progress: progress,
                 message: `正在处理 Coze 响应... (${chunk.event})`
-            });
+            }));
 
             if (chunk.event === 'Message' && chunk.data && chunk.data.content) {
                 try {
@@ -225,14 +198,14 @@ async function executeCozeWorkflow(input, jobId, kvStore) {
 }
 
 // 生成文档
-async function generateDocument(workflowData, jobId, kvStore) {
+async function generateDocument(workflowData, jobId) {
     console.log(`[${jobId}] 开始生成文档...`);
-    
-    await kvStore.set(`job:${jobId}`, {
+
+    await redis.set(`job:${jobId}`, JSON.stringify({
         status: 'processing',
         progress: 70,
         message: '正在调用 Google Apps Script...'
-    });
+    }));
 
     const googleAppsScriptURL = 'https://script.google.com/macros/s/AKfycbw44ekOAjkT0xc1ZkQhiIQowZRot_cGTsKd4Z6dVUATM8ROGQMvue3rAWueqb7WEzmlEw/exec';
     
@@ -260,12 +233,12 @@ async function generateDocument(workflowData, jobId, kvStore) {
     }
 
     console.log(`[${jobId}] Google Apps Script 成功，docId:`, docId);
-    
-    await kvStore.set(`job:${jobId}`, {
+
+    await redis.set(`job:${jobId}`, JSON.stringify({
         status: 'processing',
         progress: 80,
         message: '正在生成下载链接...'
-    });
+    }));
 
     const downloadResponse = await fetch('https://workflow.lilingbo.top/api/download', {
         method: 'POST',

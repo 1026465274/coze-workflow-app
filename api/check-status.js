@@ -1,34 +1,8 @@
 // Vercel Serverless Function - Check Workflow Status
+import { Redis } from '@upstash/redis';
 
-// 初始化 KV 存储
-let kv = null;
-let kvInitialized = false;
-
-async function initKV() {
-    if (kvInitialized) return kv;
-
-    try {
-        const kvModule = await import('@vercel/kv');
-        kv = kvModule.kv;
-        console.log('Vercel KV 初始化成功');
-    } catch (error) {
-        console.warn('Vercel KV 不可用，使用内存存储作为降级方案');
-        // 内存存储降级方案
-        const memoryStore = new Map();
-        kv = {
-            set: async (key, value) => {
-                memoryStore.set(key, value);
-                return 'OK';
-            },
-            get: async (key) => {
-                return memoryStore.get(key) || null;
-            }
-        };
-    }
-
-    kvInitialized = true;
-    return kv;
-}
+// Initialize Redis
+const redis = Redis.fromEnv();
 
 export default async function handler(req, res) {
     // 设置 CORS 头
@@ -64,9 +38,9 @@ export default async function handler(req, res) {
 
         console.log(`查询任务状态: ${jobId}`);
 
-        // 初始化 KV 并查询任务状态
-        const kvStore = await initKV();
-        const jobData = await kvStore.get(`job:${jobId}`);
+        // 从 Redis 中查询任务状态
+        const jobDataStr = await redis.get(`job:${jobId}`);
+        const jobData = jobDataStr ? JSON.parse(jobDataStr) : null;
 
         if (!jobData) {
             return res.status(404).json({
