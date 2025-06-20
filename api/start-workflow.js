@@ -1,0 +1,80 @@
+// Vercel Serverless Function - Start Async Workflow
+import { kv } from '@vercel/kv';
+import { processWorkflow } from './worker.js';
+
+export default async function handler(req, res) {
+    // 设置 CORS 头
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    // 处理 OPTIONS 预检请求
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+    }
+
+    // 只允许 POST 请求
+    if (req.method !== 'POST') {
+        return res.status(405).json({ 
+            error: 'Method not allowed',
+            message: '只支持 POST 请求' 
+        });
+    }
+
+    try {
+        const { input } = req.body;
+
+        // 验证输入
+        if (!input || typeof input !== 'string' || input.trim() === '') {
+            return res.status(400).json({
+                error: 'Invalid input',
+                message: '请提供有效的输入内容'
+            });
+        }
+
+        // 生成唯一的任务 ID
+        const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+        
+        console.log(`[${jobId}] 创建新的工作流任务`);
+
+        // 在 KV 中创建初始状态记录
+        await kv.set(`job:${jobId}`, {
+            status: 'pending',
+            progress: 0,
+            message: '任务已创建，等待处理...',
+            input: input.trim(),
+            createdTime: new Date().toISOString(),
+            jobId: jobId
+        });
+
+        // 非阻塞地启动后台处理
+        // 使用 setTimeout 确保不阻塞响应
+        setTimeout(async () => {
+            try {
+                await processWorkflow(jobId, input.trim());
+            } catch (error) {
+                console.error(`[${jobId}] 后台处理失败:`, error);
+                // 错误已经在 processWorkflow 中处理了
+            }
+        }, 0);
+
+        // 立即返回任务 ID
+        return res.status(202).json({
+            success: true,
+            jobId: jobId,
+            status: 'pending',
+            message: '任务已启动，请使用 jobId 查询进度',
+            checkStatusUrl: `/api/check-status?jobId=${jobId}`
+        });
+
+    } catch (error) {
+        console.error('启动工作流任务失败:', error);
+        
+        return res.status(500).json({
+            error: 'Internal server error',
+            message: '启动任务失败，请稍后重试',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+}

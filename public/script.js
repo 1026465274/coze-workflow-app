@@ -10,61 +10,109 @@ const infoJsonContainer = document.getElementById('info-json-display');
 const errorMessage = document.getElementById('error-message');
 const errorText = document.getElementById('error-text');
 
+// 当前任务状态
+let currentJobId = null;
+let statusCheckInterval = null;
+
 // 表单提交事件监听
 form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    
+
     console.log('用户输入:', userInput.value);
     const inputValue = userInput.value.trim();
-    
+
     // 输入验证
     if (!inputValue) {
         showError('请告诉我你的愿望哦~ 💕');
         return;
     }
-    
+
     // 开始处理
     setLoadingState(true);
     hideError();
     hideResults();
-    
-    try {
-        let data;
 
+    try {
         // 检查是否使用直接 Coze API
         const useDirectAPI = localStorage.getItem('useDirectCozeAPI') === 'true';
 
         if (useDirectAPI) {
-            // 直接调用 Coze API
-            data = await callDirectCozeAPI(inputValue);
-        } else {
-            // 使用代理 API
-            data = await callProxyAPI(inputValue);
-        }
-   
-        
-        // 检查返回数据格式
-        if (!data || typeof data !== 'object') {
-            throw new Error('魔法咒语格式不正确呢~ 😢');
-        }
-        
-        // 立即显示工作流结果
-        displayResults(data);
+            // 直接调用 Coze API（同步模式）
+            const data = await callDirectCozeAPI(inputValue);
+            console.log('✨ 直接 API 调用成功:', data);
+            displayResults(data);
 
-        // 异步生成文档下载链接
-        if (data.infoJson && (data.infoJson.extracted_infojson || data.infoJson.response_data)) {
-            // 优先使用提取的 infojson，否则使用 response_data
-            const workflowData = data.infoJson.extracted_infojson || data.infoJson.response_data;
-            generateDocumentAsync(workflowData);
+            // 异步生成文档
+            if (data.infoJson && (data.infoJson.extracted_infojson || data.infoJson.response_data)) {
+                const workflowData = data.infoJson.extracted_infojson || data.infoJson.response_data;
+                generateDocumentAsync(workflowData);
+            }
+            setLoadingState(false);
+        } else {
+            // 使用异步工作流模式
+            await startAsyncWorkflow(inputValue);
         }
 
     } catch (error) {
         console.error('💔 魔法施展失败:', error);
         showError(`魔法失败了呢~ ${error.message} 😢`);
-    } finally {
         setLoadingState(false);
     }
 });
+
+// 启动异步工作流
+async function startAsyncWorkflow(inputValue) {
+    try {
+        console.log('🚀 启动异步工作流...');
+
+        // 配置 API 基础 URL
+        let API_BASE_URL = '';
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            if (window.location.port === '3000') {
+                API_BASE_URL = '';  // 本地 Vercel Dev 服务器
+            } else {
+                API_BASE_URL = 'https://workflow.lilingbo.top';  // 线上 API
+            }
+        }
+
+        const startUrl = `${API_BASE_URL}/api/start-workflow`;
+        console.log('调用启动 API:', startUrl);
+
+        const response = await fetch(startUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                input: inputValue
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`启动任务失败: ${response.status}`);
+        }
+
+        const startData = await response.json();
+        currentJobId = startData.jobId;
+
+        console.log('✅ 任务已启动:', startData);
+
+        // 显示任务启动状态
+        showTaskStatus({
+            status: 'pending',
+            message: '任务已启动，正在处理中...',
+            progress: 0,
+            jobId: currentJobId
+        });
+
+        // 开始轮询状态
+        startStatusPolling();
+
+    } catch (error) {
+        console.error('启动异步工作流失败:', error);
+        throw error;
+    }
+}
 
 // 设置加载状态
 function setLoadingState(isLoading) {
@@ -275,27 +323,173 @@ async function generateDocumentAsync(workflowData) {
     }
 }
 
-// 调用代理 API
-async function callProxyAPI(inputValue) {
-    // 配置 API 基础 URL
-    let API_BASE_URL = '';
-
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        // 本地开发：检查是否有本地 Vercel Dev 服务器运行
-        if (window.location.port === '3000') {
-            API_BASE_URL = '';  // 使用本地 Vercel Dev 服务器 (localhost:3000)
-            console.log('使用本地 Vercel Dev 服务器');
-        } else {
-            API_BASE_URL = 'https://workflow.lilingbo.top';  // 使用线上 API
-            console.log('本地开发，调用线上 API');
-        }
-    } else {
-        API_BASE_URL = '';  // 生产环境使用相对路径
-        console.log('生产环境，使用相对路径');
+// 开始状态轮询
+function startStatusPolling() {
+    if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
     }
 
-    const apiUrl = `${API_BASE_URL}/api/run-workflow`;
-    console.log('调用代理 API:', apiUrl);
+    statusCheckInterval = setInterval(async () => {
+        try {
+            await checkJobStatus();
+        } catch (error) {
+            console.error('状态检查失败:', error);
+            // 继续轮询，不中断
+        }
+    }, 2000); // 每2秒检查一次
+}
+
+// 检查任务状态
+async function checkJobStatus() {
+    if (!currentJobId) return;
+
+    // 配置 API 基础 URL
+    let API_BASE_URL = '';
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        if (window.location.port === '3000') {
+            API_BASE_URL = '';
+        } else {
+            API_BASE_URL = 'https://workflow.lilingbo.top';
+        }
+    }
+
+    const checkUrl = `${API_BASE_URL}/api/check-status?jobId=${currentJobId}`;
+
+    const response = await fetch(checkUrl);
+    if (!response.ok) {
+        throw new Error(`状态检查失败: ${response.status}`);
+    }
+
+    const statusData = await response.json();
+    console.log('📊 任务状态更新:', statusData);
+
+    // 更新状态显示
+    updateTaskStatus(statusData);
+
+    // 如果任务完成或失败，停止轮询
+    if (statusData.status === 'completed' || statusData.status === 'failed') {
+        clearInterval(statusCheckInterval);
+        statusCheckInterval = null;
+        setLoadingState(false);
+
+        if (statusData.status === 'completed') {
+            // 显示完成结果
+            displayResults(statusData.result);
+        }
+    }
+}
+
+// 显示任务状态
+function showTaskStatus(statusData) {
+    // 创建状态显示区域
+    const statusSection = document.createElement('div');
+    statusSection.className = 'task-status-section';
+    statusSection.id = 'task-status';
+    statusSection.innerHTML = `
+        <h3 class="status-title">🔄 任务处理状态</h3>
+        <div class="status-content">
+            <div class="status-indicator">
+                <span class="status-icon">⏳</span>
+                <span class="status-text">${statusData.message}</span>
+            </div>
+            <div class="status-progress">
+                <div class="progress-bar" style="width: ${statusData.progress}%"></div>
+            </div>
+            <div class="status-details">
+                <p>任务 ID: ${statusData.jobId}</p>
+                <p>状态: <span class="status-badge ${statusData.status}">${getStatusText(statusData.status)}</span></p>
+                <p>进度: ${statusData.progress}%</p>
+            </div>
+        </div>
+    `;
+
+    // 显示状态区域
+    resultsSection.style.display = 'block';
+    resultsSection.appendChild(statusSection);
+
+    // 滚动到状态区域
+    statusSection.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+    });
+}
+
+// 更新任务状态
+function updateTaskStatus(statusData) {
+    const statusSection = document.getElementById('task-status');
+    if (!statusSection) return;
+
+    const statusIcon = statusSection.querySelector('.status-icon');
+    const statusText = statusSection.querySelector('.status-text');
+    const progressBar = statusSection.querySelector('.progress-bar');
+    const statusBadge = statusSection.querySelector('.status-badge');
+
+    // 更新图标
+    switch (statusData.status) {
+        case 'pending':
+            statusIcon.textContent = '⏳';
+            break;
+        case 'processing':
+            statusIcon.textContent = '⚙️';
+            break;
+        case 'completed':
+            statusIcon.textContent = '✅';
+            break;
+        case 'failed':
+            statusIcon.textContent = '❌';
+            break;
+    }
+
+    // 更新文本和进度
+    statusText.textContent = statusData.message;
+    progressBar.style.width = `${statusData.progress}%`;
+    statusBadge.textContent = getStatusText(statusData.status);
+    statusBadge.className = `status-badge ${statusData.status}`;
+
+    // 如果完成，显示下载链接
+    if (statusData.status === 'completed' && statusData.downloadUrl) {
+        const downloadHtml = `
+            <div class="download-section">
+                <p>您的魔法文档已经准备好了！✨</p>
+                <a href="${statusData.downloadUrl}"
+                   class="download-btn"
+                   download="${statusData.fileName || 'workflow_result.docx'}"
+                   target="_blank">
+                    📄 下载魔法文档
+                </a>
+            </div>
+        `;
+        statusSection.querySelector('.status-content').innerHTML += downloadHtml;
+    }
+}
+
+// 获取状态文本
+function getStatusText(status) {
+    const statusMap = {
+        'pending': '等待中',
+        'processing': '处理中',
+        'completed': '已完成',
+        'failed': '失败'
+    };
+    return statusMap[status] || status;
+}
+
+// 调用代理 API（现在改为异步模式，这个函数已废弃，保留用于兼容）
+async function callProxyAPI(inputValue) {
+    console.warn('callProxyAPI 已废弃，请使用 startAsyncWorkflow');
+
+    // 为了兼容性，这里调用旧的 worker API
+    let API_BASE_URL = '';
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        if (window.location.port === '3000') {
+            API_BASE_URL = '';
+        } else {
+            API_BASE_URL = 'https://workflow.lilingbo.top';
+        }
+    }
+
+    const apiUrl = `${API_BASE_URL}/api/worker`;
+    console.log('调用 Worker API (兼容模式):', apiUrl);
 
     const response = await fetch(apiUrl, {
         method: 'POST',
