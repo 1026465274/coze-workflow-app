@@ -30,11 +30,15 @@ form.addEventListener('submit', async (event) => {
     try {
         let data;
 
+        // 配置：是否使用模拟数据
+        const USE_MOCK_DATA = false; // 设置为 true 使用模拟数据，false 使用真实 API
+
         // 检测是否在本地开发环境
-        const isLocalDev = window.location.hostname === 'localhost' ||
+        const isLocalDev = (window.location.hostname === 'localhost' ||
                           window.location.hostname === '127.0.0.1' ||
                           window.location.hostname.includes('localhost') ||
-                          (window.location.port && ['3000', '3001', '8080', '5000'].includes(window.location.port));
+                          (window.location.port && ['3000', '3001', '8080', '5000'].includes(window.location.port)))
+                          && USE_MOCK_DATA; // 只有在本地且开启模拟时才使用模拟数据
 
         if (isLocalDev) {
             // 本地开发模式：使用模拟数据
@@ -63,8 +67,16 @@ form.addEventListener('submit', async (event) => {
                 }
             };
         } else {
-            // 生产环境：调用真实 API
-            const response = await fetch('/api/run-workflow', {
+            // 真实 API 调用
+            // 配置 API 基础 URL
+            const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                ? 'https://workflow.lilingbo.top'  // 本地开发时使用线上 API
+                : '';  // 生产环境使用相对路径
+
+            const apiUrl = `${API_BASE_URL}/api/run-workflow`;
+            console.log('调用真实 API:', apiUrl);
+
+            const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -231,7 +243,15 @@ async function generateDocumentAsync(workflowData) {
     try {
         statusText.textContent = '正在调用 Google Apps Script...';
 
-        const response = await fetch('/api/generate-document', {
+        // 配置 API 基础 URL
+        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'https://workflow.lilingbo.top'  // 本地开发时使用线上 API
+            : '';  // 生产环境使用相对路径
+
+        const apiUrl = `${API_BASE_URL}/api/generate-document`;
+        console.log('调用文档生成 API:', apiUrl);
+
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

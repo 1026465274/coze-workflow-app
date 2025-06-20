@@ -83,7 +83,8 @@ export default async function handler(req, res) {
         const apiPromise = apiClient.workflows.runs.stream({
             workflow_id: COZE_WORKFLOW_ID,
             parameters: {
-                input: input.trim()
+                input: input.trim(),
+                getJson: true,
             }
         });
 
