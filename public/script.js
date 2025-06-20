@@ -75,7 +75,7 @@ async function startAsyncWorkflow(inputValue) {
             }
         }
 
-        const startUrl = `${API_BASE_URL}/api/start-workflow`;
+        const startUrl = `${API_BASE_URL}/api/start-workflow-simple`;
         console.log('调用启动 API:', startUrl);
 
         const response = await fetch(startUrl, {

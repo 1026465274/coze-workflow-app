@@ -1,5 +1,23 @@
 // Vercel Serverless Function - Start Async Workflow
-import { kv } from '@vercel/kv';
+let kv;
+try {
+    const kvModule = await import('@vercel/kv');
+    kv = kvModule.kv;
+} catch (error) {
+    console.warn('Vercel KV 不可用，使用内存存储作为降级方案');
+    // 内存存储降级方案
+    const memoryStore = new Map();
+    kv = {
+        set: async (key, value) => {
+            memoryStore.set(key, value);
+            return 'OK';
+        },
+        get: async (key) => {
+            return memoryStore.get(key) || null;
+        }
+    };
+}
+
 import { processWorkflow } from './worker.js';
 
 export default async function handler(req, res) {
@@ -70,11 +88,13 @@ export default async function handler(req, res) {
 
     } catch (error) {
         console.error('启动工作流任务失败:', error);
-        
+        console.error('错误堆栈:', error.stack);
+
         return res.status(500).json({
             error: 'Internal server error',
             message: '启动任务失败，请稍后重试',
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            details: error.message,
+            errorType: error.constructor.name
         });
     }
 }

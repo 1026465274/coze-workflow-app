@@ -1,5 +1,22 @@
 // Vercel Serverless Function - Check Workflow Status
-import { kv } from '@vercel/kv';
+let kv;
+try {
+    const kvModule = await import('@vercel/kv');
+    kv = kvModule.kv;
+} catch (error) {
+    console.warn('Vercel KV 不可用，使用内存存储作为降级方案');
+    // 内存存储降级方案
+    const memoryStore = new Map();
+    kv = {
+        set: async (key, value) => {
+            memoryStore.set(key, value);
+            return 'OK';
+        },
+        get: async (key) => {
+            return memoryStore.get(key) || null;
+        }
+    };
+}
 
 export default async function handler(req, res) {
     // 设置 CORS 头
