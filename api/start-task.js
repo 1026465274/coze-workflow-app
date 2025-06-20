@@ -1,34 +1,4 @@
-// Vercel Serverless Function - Start Async Workflow
-
-// 初始化 KV 存储
-let kv = null;
-let kvInitialized = false;
-
-async function initKV() {
-    if (kvInitialized) return kv;
-
-    try {
-        const kvModule = await import('@vercel/kv');
-        kv = kvModule.kv;
-        console.log('Vercel KV 初始化成功');
-    } catch (error) {
-        console.warn('Vercel KV 不可用，使用内存存储作为降级方案');
-        // 内存存储降级方案
-        const memoryStore = new Map();
-        kv = {
-            set: async (key, value) => {
-                memoryStore.set(key, value);
-                return 'OK';
-            },
-            get: async (key) => {
-                return memoryStore.get(key) || null;
-            }
-        };
-    }
-
-    kvInitialized = true;
-    return kv;
-}
+// Vercel Serverless Function - Simple Task Starter (No Dependencies)
 
 export default async function handler(req, res) {
     // 设置 CORS 头
@@ -63,11 +33,31 @@ export default async function handler(req, res) {
 
         // 生成唯一的任务 ID
         const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-
+        
         console.log(`[${jobId}] 创建新的工作流任务`);
 
-        // 初始化 KV 并创建初始状态记录
-        const kvStore = await initKV();
+        // 初始化 KV 存储
+        let kvStore;
+        try {
+            const kvModule = await import('@vercel/kv');
+            kvStore = kvModule.kv;
+            console.log('Vercel KV 初始化成功');
+        } catch (error) {
+            console.warn('Vercel KV 不可用，使用内存存储');
+            // 简单的内存存储
+            const memoryStore = new Map();
+            kvStore = {
+                set: async (key, value) => {
+                    memoryStore.set(key, value);
+                    return 'OK';
+                },
+                get: async (key) => {
+                    return memoryStore.get(key) || null;
+                }
+            };
+        }
+
+        // 创建初始状态记录
         await kvStore.set(`job:${jobId}`, {
             status: 'pending',
             progress: 0,
@@ -77,22 +67,25 @@ export default async function handler(req, res) {
             jobId: jobId
         });
 
-        // 立即启动后台处理，不等待结果
-        // 使用 fetch 调用后台处理器，确保完全异步
-        const backgroundProcessUrl = `${req.headers.origin || 'https://workflow.lilingbo.top'}/api/background-processor`;
-
-        fetch(backgroundProcessUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                jobId: jobId,
-                input: input.trim()
-            })
-        }).catch(error => {
-            console.error(`[${jobId}] 启动后台处理失败:`, error);
-        });
+        // 异步启动后台处理
+        const baseUrl = req.headers.origin || 'https://workflow.lilingbo.top';
+        const backgroundUrl = `${baseUrl}/api/background-processor`;
+        
+        // 使用 setTimeout 确保完全异步
+        setTimeout(() => {
+            fetch(backgroundUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    jobId: jobId,
+                    input: input.trim()
+                })
+            }).catch(error => {
+                console.error(`[${jobId}] 启动后台处理失败:`, error);
+            });
+        }, 100); // 100ms 后启动，确保响应已返回
 
         // 立即返回任务 ID
         return res.status(202).json({
@@ -106,7 +99,7 @@ export default async function handler(req, res) {
     } catch (error) {
         console.error('启动工作流任务失败:', error);
         console.error('错误堆栈:', error.stack);
-
+        
         return res.status(500).json({
             error: 'Internal server error',
             message: '启动任务失败，请稍后重试',
