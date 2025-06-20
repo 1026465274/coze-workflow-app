@@ -1,23 +1,34 @@
 // Vercel Serverless Function - Background Worker for Coze Workflow
 import { CozeAPI } from '@coze/api';
 
-let kv;
-try {
-    const kvModule = await import('@vercel/kv');
-    kv = kvModule.kv;
-} catch (error) {
-    console.warn('Vercel KV 不可用，使用内存存储作为降级方案');
-    // 内存存储降级方案
-    const memoryStore = new Map();
-    kv = {
-        set: async (key, value) => {
-            memoryStore.set(key, value);
-            return 'OK';
-        },
-        get: async (key) => {
-            return memoryStore.get(key) || null;
-        }
-    };
+// 初始化 KV 存储
+let kv = null;
+let kvInitialized = false;
+
+async function initKV() {
+    if (kvInitialized) return kv;
+
+    try {
+        const kvModule = await import('@vercel/kv');
+        kv = kvModule.kv;
+        console.log('Vercel KV 初始化成功');
+    } catch (error) {
+        console.warn('Vercel KV 不可用，使用内存存储作为降级方案');
+        // 内存存储降级方案
+        const memoryStore = new Map();
+        kv = {
+            set: async (key, value) => {
+                memoryStore.set(key, value);
+                return 'OK';
+            },
+            get: async (key) => {
+                return memoryStore.get(key) || null;
+            }
+        };
+    }
+
+    kvInitialized = true;
+    return kv;
 }
 
 // 主要的工作函数，可以被其他 API 调用
@@ -25,8 +36,11 @@ export async function processWorkflow(jobId, input) {
     try {
         console.log(`[${jobId}] 开始处理工作流...`);
 
+        // 初始化 KV
+        const kvStore = await initKV();
+
         // 更新状态为处理中
-        await kv.set(`job:${jobId}`, {
+        await kvStore.set(`job:${jobId}`, {
             status: 'processing',
             progress: 0,
             message: '正在调用 Coze 工作流...',
@@ -37,7 +51,7 @@ export async function processWorkflow(jobId, input) {
         const result = await executeWorkflow(input);
 
         // 更新进度
-        await kv.set(`job:${jobId}`, {
+        await kvStore.set(`job:${jobId}`, {
             status: 'processing',
             progress: 50,
             message: '工作流完成，开始生成文档...',
@@ -51,7 +65,7 @@ export async function processWorkflow(jobId, input) {
                 const workflowData = result.infoJson.extracted_infojson || result.infoJson.response_data;
                 documentResult = await generateDocument(workflowData);
 
-                await kv.set(`job:${jobId}`, {
+                await kvStore.set(`job:${jobId}`, {
                     status: 'processing',
                     progress: 90,
                     message: '文档生成完成，正在整理结果...'
@@ -68,7 +82,7 @@ export async function processWorkflow(jobId, input) {
             documentResult
         };
 
-        await kv.set(`job:${jobId}`, {
+        await kvStore.set(`job:${jobId}`, {
             status: 'completed',
             progress: 100,
             message: '任务完成',
@@ -82,13 +96,18 @@ export async function processWorkflow(jobId, input) {
     } catch (error) {
         console.error(`[${jobId}] 工作流处理失败:`, error);
 
-        await kv.set(`job:${jobId}`, {
-            status: 'failed',
-            progress: 0,
-            message: `处理失败: ${error.message}`,
-            error: error.message,
-            failedTime: new Date().toISOString()
-        });
+        try {
+            const kvStore = await initKV();
+            await kvStore.set(`job:${jobId}`, {
+                status: 'failed',
+                progress: 0,
+                message: `处理失败: ${error.message}`,
+                error: error.message,
+                failedTime: new Date().toISOString()
+            });
+        } catch (kvError) {
+            console.error('更新失败状态时出错:', kvError);
+        }
 
         throw error;
     }
