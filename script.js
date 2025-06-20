@@ -30,40 +30,17 @@ form.addEventListener('submit', async (event) => {
     try {
         let data;
 
-        // 检测是否在本地开发环境
-        const isLocalDev = window.location.hostname === 'localhost' ||
-                          window.location.hostname === '127.0.0.1' ||
-                          window.location.port === '3000';
+                    // 真实 API 调用
+            // 配置 API 基础 URL
+            const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                ? 'https://workflow.lilingbo.top'  // 本地开发时使用线上 API
+                : '';  // 生产环境使用相对路径
 
-        if (isLocalDev) {
-            // 本地开发模式：使用模拟数据
-            console.log('✨ 魔法开发模式：使用模拟咒语响应');
+            const apiUrl = `${API_BASE_URL}/api/run-workflow`;
+            console.log('调用真实 API:', apiUrl);
 
-            // 模拟 API 延迟
-            await new Promise(resolve => setTimeout(resolve, 1500));
-
-            // 模拟 API 响应
-            data = {
-                success: true,
-                outData: `🌟 魔法已施展完成！✨\n\n你的愿望："${inputValue}"\n\n💕 这是模拟的魔法结果哦~ 当部署到真实的魔法世界（Vercel）后，这里将显示真正的 Coze 工作流魔法效果！\n\n🎀 愿你的每个梦想都能实现~ `,
-                infoJson: {
-                    timestamp: new Date().toISOString(),
-                    magic_spell_id: "✨魔法咒语ID✨",
-                    wish_length: inputValue.length,
-                    mode: "🌸 少女魔法开发模式 🌸",
-                    note: "这是模拟的魔法数据，部署后将显示真实的 Coze 魔法响应 💖",
-                    magic_details: {
-                        status: "success ✨",
-                        casting_time: "1.5s 🕐",
-                        is_simulation: true,
-                        sparkles: "✨🌟💫⭐",
-                        cuteness_level: "Maximum 💕"
-                    }
-                }
-            };
-        } else {
             // 生产环境：调用真实 API
-            const response = await fetch('https://api.coze.cn/v1/workflow/run', {
+            const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -78,7 +55,7 @@ form.addEventListener('submit', async (event) => {
             }
 
             data = await response.json();
-        }
+        
         
         // 检查返回数据格式
         if (!data || typeof data !== 'object') {

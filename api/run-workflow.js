@@ -100,12 +100,25 @@ export default async function handler(req, res) {
         let cozeData = {};
         let finalResult = '';
 
+        console.log('Coze 响应类型检查:', {
+            hasAsyncIterator: cozeResponse && typeof cozeResponse[Symbol.asyncIterator] === 'function',
+            responseType: typeof cozeResponse,
+            isArray: Array.isArray(cozeResponse),
+            responseKeys: cozeResponse ? Object.keys(cozeResponse) : []
+        });
+
         if (cozeResponse && typeof cozeResponse[Symbol.asyncIterator] === 'function') {
             // 处理流式响应
+            console.log('处理流式响应...');
             for await (const chunk of cozeResponse) {
                 console.log('收到流式数据块:', chunk);
                 if (chunk.data) {
-                    finalResult += chunk.data;
+                    // 确保 chunk.data 是字符串
+                    if (typeof chunk.data === 'string') {
+                        finalResult += chunk.data;
+                    } else {
+                        finalResult += JSON.stringify(chunk.data);
+                    }
                 }
                 if (chunk.event === 'done') {
                     cozeData = chunk;
@@ -114,8 +127,20 @@ export default async function handler(req, res) {
             }
         } else {
             // 非流式响应
+            console.log('处理非流式响应...');
             cozeData = cozeResponse;
-            finalResult = cozeData.data || cozeData.output || cozeData.result || '处理完成';
+
+            // 更好的数据提取逻辑
+            if (cozeData.data) {
+                finalResult = typeof cozeData.data === 'string' ? cozeData.data : JSON.stringify(cozeData.data);
+            } else if (cozeData.output) {
+                finalResult = typeof cozeData.output === 'string' ? cozeData.output : JSON.stringify(cozeData.output);
+            } else if (cozeData.result) {
+                finalResult = typeof cozeData.result === 'string' ? cozeData.result : JSON.stringify(cozeData.result);
+            } else {
+                // 如果没有明确的数据字段，尝试提取有用信息
+                finalResult = JSON.stringify(cozeData, null, 2);
+            }
         }
         
         console.log('Coze API 响应:', {
