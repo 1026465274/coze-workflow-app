@@ -24,8 +24,17 @@ export default async function handler(req, res) {
     }
 
     const { jobId, input } = req.body;
-    
+
+    console.log(`[${jobId}] ===== 后台处理器接收到请求 =====`);
+    console.log(`[${jobId}] 请求参数:`, {
+        hasJobId: !!jobId,
+        hasInput: !!input,
+        inputLength: input ? input.length : 0,
+        timestamp: new Date().toISOString()
+    });
+
     if (!jobId || !input) {
+        console.error(`[${jobId}] 参数验证失败:`, { jobId, hasInput: !!input });
         return res.status(400).json({
             error: 'Invalid input',
             message: '缺少必要参数'
@@ -33,6 +42,7 @@ export default async function handler(req, res) {
     }
 
     // 立即返回确认，开始后台处理
+    console.log(`[${jobId}] 参数验证通过，立即返回确认并启动后台处理`);
     res.status(200).json({
         success: true,
         message: '后台处理已启动',
@@ -40,17 +50,27 @@ export default async function handler(req, res) {
     });
 
     // 异步处理长时间任务
+    console.log(`[${jobId}] 启动异步处理任务...`);
     processLongRunningTask(jobId, input).catch(error => {
-        console.error(`[${jobId}] 后台处理异常:`, error);
+        console.error(`[${jobId}] ❌ 后台处理异常:`, error);
+        console.error(`[${jobId}] 错误堆栈:`, error.stack);
     });
 }
 
 // 长时间运行的任务处理函数
 async function processLongRunningTask(jobId, input) {
-    
+
     try {
-        console.log(`[${jobId}] 开始后台处理...`);
-        
+        console.log(`[${jobId}] ===== 后台处理函数启动 =====`);
+        console.log(`[${jobId}] 输入参数:`, {
+            jobId,
+            inputLength: input.length,
+            inputPreview: input.substring(0, 100) + '...',
+            timestamp: new Date().toISOString()
+        });
+
+        console.log(`[${jobId}] 开始更新 Redis 状态为 processing...`);
+
         // 更新状态为处理中
         await redis.set(`job:${jobId}`, {
             status: 'processing',
@@ -59,22 +79,43 @@ async function processLongRunningTask(jobId, input) {
             startTime: new Date().toISOString()
         });
 
+        console.log(`[${jobId}] Redis 状态更新成功，开始执行工作流...`);
+
         // 执行 Coze 工作流
+        console.log(`[${jobId}] 开始调用 executeCozeWorkflow 函数...`);
         const workflowResult = await executeCozeWorkflow(input, jobId);
+        console.log(`[${jobId}] executeCozeWorkflow 函数执行完成，结果:`, {
+            success: workflowResult?.success,
+            hasInfoJson: !!workflowResult?.infoJson,
+            hasExtractedInfojson: !!workflowResult?.infoJson?.extracted_infojson,
+            outDataLength: workflowResult?.outData?.length || 0
+        });
 
         // 更新进度
+        console.log(`[${jobId}] 更新进度到 60%...`);
         await redis.set(`job:${jobId}`, {
             status: 'processing',
             progress: 60,
             message: '工作流完成，开始生成文档...',
             workflowResult: workflowResult
         });
+        console.log(`[${jobId}] 进度更新完成，准备处理文档生成...`);
 
         // 处理文档生成
         let documentResult = null;
+        console.log(`[${jobId}] 检查是否需要生成文档...`);
+        console.log(`[${jobId}] workflowResult.infoJson:`, !!workflowResult.infoJson);
+        console.log(`[${jobId}] extracted_infojson:`, !!workflowResult.infoJson?.extracted_infojson);
+
         if (workflowResult.infoJson && workflowResult.infoJson.extracted_infojson) {
             try {
+                console.log(`[${jobId}] 开始生成文档...`);
                 documentResult = await generateDocument(workflowResult.infoJson.extracted_infojson, jobId);
+                console.log(`[${jobId}] 文档生成成功:`, {
+                    hasDocId: !!documentResult?.docId,
+                    hasDownloadUrl: !!documentResult?.downloadUrl,
+                    fileName: documentResult?.fileName
+                });
 
                 await redis.set(`job:${jobId}`, {
                     status: 'processing',
@@ -83,8 +124,11 @@ async function processLongRunningTask(jobId, input) {
                 });
             } catch (docError) {
                 console.error(`[${jobId}] 文档生成失败:`, docError);
+                console.error(`[${jobId}] 文档生成错误堆栈:`, docError.stack);
                 // 文档生成失败不影响主流程
             }
+        } else {
+            console.log(`[${jobId}] 跳过文档生成：没有 extracted_infojson 数据`);
         }
 
         // 完成
@@ -92,6 +136,14 @@ async function processLongRunningTask(jobId, input) {
             ...workflowResult,
             documentResult
         };
+
+        console.log(`[${jobId}] 准备更新最终状态为 completed...`);
+        console.log(`[${jobId}] 最终结果摘要:`, {
+            hasWorkflowResult: !!workflowResult,
+            hasDocumentResult: !!documentResult,
+            workflowSuccess: workflowResult?.success,
+            documentHasDownloadUrl: !!documentResult?.downloadUrl
+        });
 
         await redis.set(`job:${jobId}`, {
             status: 'completed',
@@ -101,7 +153,7 @@ async function processLongRunningTask(jobId, input) {
             completedTime: new Date().toISOString()
         });
 
-        console.log(`[${jobId}] 后台处理完成`);
+        console.log(`[${jobId}] ===== 后台处理完成 =====`);
 
     } catch (error) {
         console.error(`[${jobId}] 后台处理失败:`, error);
@@ -122,19 +174,35 @@ async function processLongRunningTask(jobId, input) {
 
 // 执行 Coze 工作流
 async function executeCozeWorkflow(input, jobId) {
+    console.log(`[${jobId}] ===== executeCozeWorkflow 函数开始 =====`);
+
     const COZE_API_KEY = process.env.COZE_API_KEY;
     const COZE_WORKFLOW_ID = process.env.COZE_WORKFLOW_ID;
 
+    console.log(`[${jobId}] 环境变量检查:`, {
+        hasApiKey: !!COZE_API_KEY,
+        apiKeyLength: COZE_API_KEY ? COZE_API_KEY.length : 0,
+        hasWorkflowId: !!COZE_WORKFLOW_ID,
+        workflowId: COZE_WORKFLOW_ID
+    });
+
     if (!COZE_API_KEY || !COZE_WORKFLOW_ID) {
+        console.error(`[${jobId}] Coze API 配置缺失!`);
         throw new Error('Coze API 配置缺失');
     }
 
+    console.log(`[${jobId}] 初始化 Coze API 客户端...`);
     const apiClient = new CozeAPI({
         token: COZE_API_KEY,
         baseURL: 'https://api.coze.cn'
     });
 
-    console.log(`[${jobId}] 调用 Coze API...`);
+    console.log(`[${jobId}] 准备调用 Coze API 流式接口...`);
+    console.log(`[${jobId}] 请求参数:`, {
+        workflow_id: COZE_WORKFLOW_ID,
+        inputLength: input.length,
+        inputPreview: input.substring(0, 50) + '...'
+    });
 
     const cozeResponse = await apiClient.workflows.runs.stream({
         workflow_id: COZE_WORKFLOW_ID,
@@ -143,15 +211,29 @@ async function executeCozeWorkflow(input, jobId) {
         }
     });
 
+    console.log(`[${jobId}] Coze API 调用完成，开始处理流式响应...`);
+    console.log(`[${jobId}] 响应类型检查:`, {
+        hasResponse: !!cozeResponse,
+        hasAsyncIterator: cozeResponse && typeof cozeResponse[Symbol.asyncIterator] === 'function',
+        responseType: typeof cozeResponse
+    });
+
     // 处理流式响应
     let messageData = null;
     let infojson = null;
     let outData = '';
     let progress = 20;
+    let chunkCount = 0;
 
     if (cozeResponse && typeof cozeResponse[Symbol.asyncIterator] === 'function') {
+        console.log(`[${jobId}] 开始处理流式数据...`);
         for await (const chunk of cozeResponse) {
-            console.log(`[${jobId}] 收到流式数据:`, chunk.event);
+            chunkCount++;
+            console.log(`[${jobId}] 收到第 ${chunkCount} 个数据块:`, {
+                event: chunk.event,
+                hasData: !!chunk.data,
+                dataType: typeof chunk.data
+            });
             
             // 更新进度
             progress = Math.min(progress + 5, 50);
@@ -163,27 +245,48 @@ async function executeCozeWorkflow(input, jobId) {
 
             if (chunk.event === 'Message' && chunk.data && chunk.data.content) {
                 try {
+                    console.log(`[${jobId}] 解析 Message 内容...`);
                     const contentData = JSON.parse(chunk.data.content);
+                    console.log(`[${jobId}] Message 内容解析成功:`, {
+                        hasInfojson: !!contentData.infojson,
+                        hasOutData: !!contentData.outData,
+                        contentKeys: Object.keys(contentData)
+                    });
+
                     if (contentData.infojson) {
                         infojson = contentData.infojson;
-                        console.log(`[${jobId}] 提取到 infojson`);
+                        console.log(`[${jobId}] ✅ 成功提取到 infojson 数据`);
                     }
                     if (contentData.outData) {
                         outData = contentData.outData;
+                        console.log(`[${jobId}] ✅ 成功提取到 outData`);
                     }
                     messageData = contentData;
                 } catch (e) {
-                    console.warn(`[${jobId}] 解析 Message content 失败:`, e);
+                    console.warn(`[${jobId}] ❌ 解析 Message content 失败:`, e);
+                    console.warn(`[${jobId}] 原始 content:`, chunk.data.content);
                 }
             }
 
             if (chunk.event === 'Done') {
+                console.log(`[${jobId}] 收到 Done 事件，流式处理结束`);
                 break;
             }
         }
+        console.log(`[${jobId}] 流式数据处理完成，共处理 ${chunkCount} 个数据块`);
+    } else {
+        console.log(`[${jobId}] ❌ 响应不是流式格式或为空`);
     }
 
-    return {
+    console.log(`[${jobId}] 构建最终结果...`);
+    console.log(`[${jobId}] 数据提取结果:`, {
+        hasInfojson: !!infojson,
+        hasOutData: !!outData,
+        hasMessageData: !!messageData,
+        outDataLength: outData ? outData.length : 0
+    });
+
+    const result = {
         success: true,
         outData: outData || JSON.stringify(infojson, null, 2) || '处理完成',
         infoJson: {
@@ -195,6 +298,9 @@ async function executeCozeWorkflow(input, jobId) {
             extracted_infojson: infojson
         }
     };
+
+    console.log(`[${jobId}] ===== executeCozeWorkflow 函数完成 =====`);
+    return result;
 }
 
 // 生成文档

@@ -38,9 +38,15 @@ export default async function handler(req, res) {
         // 生成唯一的任务 ID
         const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 
-        console.log(`[${jobId}] 创建新的工作流任务`);
+        console.log(`[${jobId}] ===== 创建新的工作流任务 =====`);
+        console.log(`[${jobId}] 输入参数:`, {
+            inputLength: input.length,
+            inputPreview: input.substring(0, 100) + '...',
+            timestamp: new Date().toISOString()
+        });
 
         // 在 Redis 中创建初始状态记录
+        console.log(`[${jobId}] 保存初始状态到 Redis...`);
         await redis.set(`job:${jobId}`, {
             status: 'pending',
             progress: 0,
@@ -49,11 +55,13 @@ export default async function handler(req, res) {
             createdTime: new Date().toISOString(),
             jobId: jobId
         });
+        console.log(`[${jobId}] 初始状态保存成功`);
 
         // 立即启动后台处理，不等待结果
-        // 使用 fetch 调用后台处理器，确保完全异步
         const backgroundProcessUrl = `${req.headers.origin || 'https://workflow.lilingbo.top'}/api/background-processor`;
+        console.log(`[${jobId}] 准备启动后台处理器:`, backgroundProcessUrl);
 
+        // 使用 fetch 调用后台处理器，确保完全异步
         fetch(backgroundProcessUrl, {
             method: 'POST',
             headers: {
@@ -63,6 +71,8 @@ export default async function handler(req, res) {
                 jobId: jobId,
                 input: input.trim()
             })
+        }).then(() => {
+            console.log(`[${jobId}] 后台处理器启动请求发送成功`);
         }).catch(error => {
             console.error(`[${jobId}] 启动后台处理失败:`, error);
         });

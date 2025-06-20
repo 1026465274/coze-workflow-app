@@ -36,10 +36,20 @@ export default async function handler(req, res) {
             });
         }
 
-        console.log(`查询任务状态: ${jobId}`);
+        console.log(`[${jobId}] ===== 查询任务状态 =====`);
 
         // 从 Redis 中查询任务状态
+        console.log(`[${jobId}] 从 Redis 查询数据...`);
         const jobData = await redis.get(`job:${jobId}`);
+
+        console.log(`[${jobId}] Redis 查询结果:`, {
+            hasData: !!jobData,
+            dataType: typeof jobData,
+            status: jobData?.status,
+            progress: jobData?.progress,
+            message: jobData?.message,
+            dataKeys: jobData ? Object.keys(jobData) : []
+        });
 
         if (!jobData) {
             return res.status(404).json({
