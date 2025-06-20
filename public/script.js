@@ -77,7 +77,7 @@ async function startAsyncWorkflow(inputValue) {
             }
         }
 
-        const startUrl = `${API_BASE_URL}/api/start-task`;
+        const startUrl = `${API_BASE_URL}/api/start-simple`;
         console.log('调用启动 API:', startUrl);
 
         const response = await fetch(startUrl, {
@@ -368,7 +368,7 @@ async function checkJobStatus() {
         }
     }
 
-    const checkUrl = `${API_BASE_URL}/api/check-status?jobId=${currentJobId}`;
+    const checkUrl = `${API_BASE_URL}/api/status-simple?jobId=${currentJobId}`;
 
     const response = await fetch(checkUrl);
     if (!response.ok) {
