@@ -4,5 +4,10 @@
       "source": "/((?!api).*)",
       "destination": "/public/$1"
     }
-  ]
+  ],
+  "functions": {
+    "api/background-processor.js": {
+      "maxDuration": 30
+    }
+  }
 }
