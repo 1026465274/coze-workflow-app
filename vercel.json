@@ -8,6 +8,9 @@
   "functions": {
     "api/background-processor.js": {
       "maxDuration": 30
+    },
+    "api/test-worker.js": {
+      "maxDuration": 20
     }
   }
 }
