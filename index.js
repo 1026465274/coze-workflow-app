@@ -1,64 +1,273 @@
-// Vercel Serverless Function - Background Processor for Long-Running Tasks
-import { CozeAPI } from '@coze/api';
+// Express.js Server - Coze Workflow App
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { Redis } from '@upstash/redis';
+import { CozeAPI } from '@coze/api';
+import { put } from '@vercel/blob';
 
-// Initialize Redis
+// ES Module 兼容性设置
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 初始化 Express 应用
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// 初始化 Redis
 const redis = Redis.fromEnv();
 
-export default async function handler(req, res) {
-    // 设置 CORS 头
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+// 中间件设置
+app.use(cors());
+app.use(express.json());
 
-    if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
-    }
+// 静态文件服务 - 提供 public 目录下的文件
+app.use(express.static(path.join(__dirname, 'public')));
 
-    if (req.method !== 'POST') {
-        return res.status(405).json({ 
-            error: 'Method not allowed',
-            message: '只支持 POST 请求' 
-        });
-    }
+// 根路径重定向到 index.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
-    const { jobId, input } = req.body;
+// ===== API 路由 =====
 
-    console.log(`[${jobId}] ===== 后台处理器接收到请求 =====`);
-    console.log(`[${jobId}] 请求参数:`, {
-        hasJobId: !!jobId,
-        hasInput: !!input,
-        inputLength: input ? input.length : 0,
-        timestamp: new Date().toISOString()
-    });
-
-    if (!jobId || !input) {
-        console.error(`[${jobId}] 参数验证失败:`, { jobId, hasInput: !!input });
-        return res.status(400).json({
-            error: 'Invalid input',
-            message: '缺少必要参数'
-        });
-    }
-
-    // 立即返回确认，开始后台处理
-    console.log(`[${jobId}] 参数验证通过，立即返回确认并启动后台处理`);
-    res.status(200).json({
-        success: true,
-        message: '后台处理已启动',
-        jobId: jobId
-    });
-
-    // 直接调用后台任务处理函数（HTTP 调用模式）
-    console.log(`[${jobId}] HTTP 模式：直接执行后台处理任务...`);
+// POST /api/start-workflow - 启动异步工作流任务
+app.post('/api/start-workflow', async (req, res) => {
     try {
-        await runBackgroundTask(jobId, input);
-        console.log(`[${jobId}] HTTP 模式：后台任务执行完成`);
+        const { input } = req.body;
+
+        // 验证输入
+        if (!input || typeof input !== 'string' || input.trim() === '') {
+            return res.status(400).json({
+                error: 'Invalid input',
+                message: '请提供有效的输入内容'
+            });
+        }
+
+        // 生成唯一的任务 ID
+        const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+
+        console.log(`[${jobId}] ===== 创建新的工作流任务 =====`);
+        console.log(`[${jobId}] 输入参数:`, {
+            inputLength: input.length,
+            inputPreview: input.substring(0, 100) + '...',
+            timestamp: new Date().toISOString()
+        });
+
+        // 在 Redis 中创建初始状态记录
+        console.log(`[${jobId}] 保存初始状态到 Redis...`);
+        await redis.set(`job:${jobId}`, {
+            status: 'pending',
+            progress: 0,
+            message: '任务已创建，等待处理...',
+            input: input.trim(),
+            createdTime: new Date().toISOString(),
+            jobId: jobId
+        });
+        console.log(`[${jobId}] 初始状态保存成功`);
+
+        // 启动后台处理任务（不等待完成）
+        console.log(`[${jobId}] 准备启动后台处理任务...`);
+        processBackgroundTask(jobId, input.trim()).catch(error => {
+            console.error(`[${jobId}] 后台任务执行失败:`, error);
+        });
+
+        console.log(`[${jobId}] 后台任务已启动，立即返回响应`);
+
+        // 立即返回任务 ID
+        return res.status(202).json({
+            success: true,
+            jobId: jobId,
+            status: 'pending',
+            message: '任务已启动，请使用 jobId 查询进度',
+            checkStatusUrl: `/api/check-status?jobId=${jobId}`
+        });
+
     } catch (error) {
-        console.error(`[${jobId}] ❌ HTTP 模式：后台处理异常:`, error);
-        console.error(`[${jobId}] 错误堆栈:`, error.stack);
+        console.error('启动工作流任务失败:', error);
+        console.error('错误堆栈:', error.stack);
+
+        return res.status(500).json({
+            error: 'Internal server error',
+            message: '启动任务失败，请稍后重试',
+            details: error.message,
+            errorType: error.constructor.name
+        });
     }
-}
+});
+
+// GET /api/check-status - 查询任务状态
+app.get('/api/check-status', async (req, res) => {
+    try {
+        // 从 URL query 中获取 jobId
+        const { jobId } = req.query;
+
+        // 验证 jobId
+        if (!jobId || typeof jobId !== 'string') {
+            return res.status(400).json({
+                error: 'Invalid jobId',
+                message: '请提供有效的任务 ID'
+            });
+        }
+
+        console.log(`[${jobId}] ===== 查询任务状态 =====`);
+
+        // 从 Redis 中查询任务状态
+        console.log(`[${jobId}] 从 Redis 查询数据...`);
+        const jobData = await redis.get(`job:${jobId}`);
+
+        console.log(`[${jobId}] Redis 查询结果:`, {
+            hasData: !!jobData,
+            dataType: typeof jobData,
+            status: jobData?.status,
+            progress: jobData?.progress,
+            message: jobData?.message,
+            dataKeys: jobData ? Object.keys(jobData) : []
+        });
+
+        if (!jobData) {
+            return res.status(404).json({
+                error: 'Job not found',
+                message: '未找到指定的任务',
+                jobId: jobId
+            });
+        }
+
+        // 计算任务运行时间
+        const createdTime = new Date(jobData.createdTime);
+        const currentTime = new Date();
+        const runningTime = Math.floor((currentTime - createdTime) / 1000); // 秒
+
+        // 构建响应数据
+        const response = {
+            success: true,
+            jobId: jobId,
+            status: jobData.status,
+            progress: jobData.progress || 0,
+            message: jobData.message || '',
+            runningTime: runningTime,
+            createdTime: jobData.createdTime
+        };
+
+        // 根据状态添加额外信息
+        switch (jobData.status) {
+            case 'pending':
+                response.estimatedTime = '预计 30-60 秒';
+                break;
+                
+            case 'processing':
+                response.currentStep = jobData.message;
+                response.estimatedRemaining = Math.max(0, 60 - runningTime) + ' 秒';
+                break;
+                
+            case 'completed':
+                response.result = jobData.result;
+                response.completedTime = jobData.completedTime;
+                response.totalTime = Math.floor((new Date(jobData.completedTime) - createdTime) / 1000);
+                
+                // 如果有文档下载链接，添加到响应中
+                if (jobData.result && jobData.result.documentResult) {
+                    response.downloadUrl = jobData.result.documentResult.downloadUrl;
+                    response.fileName = jobData.result.documentResult.fileName;
+                }
+                break;
+                
+            case 'failed':
+                response.error = jobData.error;
+                response.failedTime = jobData.failedTime;
+                break;
+        }
+
+        return res.status(200).json(response);
+
+    } catch (error) {
+        console.error('查询任务状态失败:', error);
+        
+        return res.status(500).json({
+            error: 'Internal server error',
+            message: '查询状态失败，请稍后重试',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+// POST /api/download - 文档下载处理
+app.post('/api/download', async (req, res) => {
+    try {
+        // 支持两种参数名：docId (Cloudflare Worker) 和 documentId (直接调用)
+        const { docId, documentId, fileName } = req.body;
+        const finalDocId = docId || documentId;
+
+        // 验证输入
+        if (!finalDocId) {
+            return res.status(400).json({
+                error: 'Invalid input',
+                message: '请提供文档 ID (docId 或 documentId)'
+            });
+        }
+
+        console.log('开始处理文档下载:', {
+            docId: finalDocId,
+            fileName: fileName || 'document.docx',
+            source: docId ? 'cloudflare-worker' : 'direct-call'
+        });
+
+        // 1. 从 Google Docs 下载文档
+        const googleDocsExportUrl = `https://docs.google.com/document/d/${finalDocId}/export?format=docx`;
+
+        console.log('下载 Google Docs 文档:', googleDocsExportUrl);
+
+        const docResponse = await fetch(googleDocsExportUrl, {
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        if (!docResponse.ok) {
+            throw new Error(`下载文档失败: ${docResponse.status} ${docResponse.statusText}`);
+        }
+
+        // 2. 获取文档内容
+        const docBuffer = await docResponse.arrayBuffer();
+        const docBlob = new Uint8Array(docBuffer);
+
+        console.log('文档下载成功，大小:', docBlob.length, 'bytes');
+
+        // 3. 上传到 Vercel Blob
+        const finalFileName = fileName || `document_${Date.now()}.docx`;
+
+        const blob = await put(finalFileName, docBlob, {
+            access: 'public',
+            contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        });
+
+        console.log('文档上传到 Vercel Blob 成功:', blob.url);
+
+        // 4. 返回下载链接
+        return res.status(200).json({
+            success: true,
+            downloadUrl: blob.url,
+            fileName: finalFileName,
+            fileSize: docBlob.length,
+            documentId: finalDocId,
+            docId: finalDocId, // 兼容两种命名
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        console.error('文档处理错误:', error);
+
+        return res.status(500).json({
+            error: 'Document processing error',
+            message: '文档处理失败，请稍后重试',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+// ===== 后台任务处理函数 =====
 
 // Redis 连接测试函数
 async function testRedisConnection(jobId) {
@@ -96,9 +305,9 @@ async function testRedisConnection(jobId) {
     }
 }
 
-// 导出的后台任务处理函数 - 供其他模块调用
-export async function runBackgroundTask(jobId, input) {
-    console.log(`[${jobId}] ===== runBackgroundTask 函数开始执行 =====`);
+// 主要的后台任务处理函数
+async function processBackgroundTask(jobId, input) {
+    console.log(`[${jobId}] ===== 后台任务处理开始 =====`);
 
     // 首先测试 Redis 连接
     const redisOk = await testRedisConnection(jobId);
@@ -106,12 +315,6 @@ export async function runBackgroundTask(jobId, input) {
         console.error(`[${jobId}] Redis 连接失败，无法继续执行`);
         throw new Error('Redis 连接失败');
     }
-
-    return await processLongRunningTask(jobId, input);
-}
-
-// 长时间运行的任务处理函数
-async function processLongRunningTask(jobId, input) {
 
     try {
         console.log(`[${jobId}] ===== 后台处理函数启动 =====`);
@@ -329,7 +532,7 @@ async function executeCozeWorkflow(input, jobId) {
                 hasData: !!chunk.data,
                 dataType: typeof chunk.data
             });
-            
+
             // 更新进度
             progress = Math.min(progress + 5, 50);
             await redis.set(`job:${jobId}`, {
@@ -409,7 +612,7 @@ async function generateDocument(workflowData, jobId) {
     });
 
     const googleAppsScriptURL = 'https://script.google.com/macros/s/AKfycbw44ekOAjkT0xc1ZkQhiIQowZRot_cGTsKd4Z6dVUATM8ROGQMvue3rAWueqb7WEzmlEw/exec';
-    
+
     const gasResponse = await fetch(googleAppsScriptURL, {
         method: 'POST',
         headers: {
@@ -428,7 +631,7 @@ async function generateDocument(workflowData, jobId) {
 
     const gasData = await gasResponse.json();
     const docId = gasData.docId || gasData.documentId || gasData.id;
-    
+
     if (!docId) {
         throw new Error('未能从 Google Apps Script 获取文档 ID');
     }
@@ -441,7 +644,8 @@ async function generateDocument(workflowData, jobId) {
         message: '正在生成下载链接...'
     });
 
-    const downloadResponse = await fetch('https://workflow.lilingbo.top/api/download', {
+    // 注意：这里需要调用本地的下载 API，而不是外部 URL
+    const downloadResponse = await fetch(`http://localhost:${PORT}/api/download`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -466,3 +670,14 @@ async function generateDocument(workflowData, jobId) {
         fileSize: downloadData.fileSize
     };
 }
+
+// 启动服务器
+app.listen(PORT, () => {
+    console.log(`🚀 Express 服务器已启动`);
+    console.log(`📍 服务器地址: http://localhost:${PORT}`);
+    console.log(`📁 静态文件目录: ${path.join(__dirname, 'public')}`);
+    console.log(`🔗 API 端点:`);
+    console.log(`   POST /api/start-workflow - 启动工作流任务`);
+    console.log(`   GET  /api/check-status   - 查询任务状态`);
+    console.log(`⏰ 启动时间: ${new Date().toISOString()}`);
+});

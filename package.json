@@ -2,13 +2,14 @@
   "name": "coze-workflow-app",
   "version": "1.0.0",
   "description": "A web form to call Coze workflow API with cyberpunk-style UI",
-  "main": "index.html",
+  "main": "index.js",
+  "type": "module",
   "scripts": {
     "dev": "vercel dev",
     "dev-simple": "npx serve .",
     "dev-local": "vercel dev --listen 3000",
     "build": "echo 'Static site - no build needed'",
-    "start": "npx serve ."
+    "start": "node index.js"
   },
   "keywords": [
     "coze",
@@ -23,7 +24,9 @@
     "@coze/api": "^1.0.0",
     "@upstash/redis": "^1.35.0",
     "@vercel/blob": "^0.15.1",
-    "@vercel/kv": "^1.0.1"
+    "@vercel/kv": "^1.0.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
   },
   "devDependencies": {
     "serve": "^14.2.1"
