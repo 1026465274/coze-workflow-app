@@ -4,7 +4,6 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Redis } from '@upstash/redis';
-import { CozeAPI } from '@coze/api';
 import { put } from '@vercel/blob';
 
 // ES Module 兼容性设置
@@ -492,110 +491,64 @@ async function executeCozeWorkflow(input, jobId) {
         throw new Error('Coze API 配置缺失');
     }
 
-    console.log(`[${jobId}] 初始化 Coze API 客户端...`);
-    const apiClient = new CozeAPI({
-        token: COZE_API_KEY,
-        baseURL: 'https://api.coze.cn'
-    });
-
-    console.log(`[${jobId}] 准备调用 Coze API 流式接口...`);
+    console.log(`[${jobId}] 准备调用 Coze API 非流式接口...`);
     console.log(`[${jobId}] 请求参数:`, {
         workflow_id: COZE_WORKFLOW_ID,
         inputLength: input.length,
         inputPreview: input.substring(0, 50) + '...'
     });
 
-    const cozeResponse = await apiClient.workflows.runs.stream({
-        workflow_id: COZE_WORKFLOW_ID,
-        parameters: {
-            input: input.trim()
-        }
+    // 使用非流式接口 /v1/workflow/run
+    const response = await fetch('https://api.coze.cn/v1/workflow/run', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${COZE_API_KEY}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            workflow_id: COZE_WORKFLOW_ID,
+            parameters: {
+                input: input.trim()
+            }
+        })
     });
 
-    console.log(`[${jobId}] Coze API 调用完成，开始处理流式响应...`);
-    console.log(`[${jobId}] 响应类型检查:`, {
-        hasResponse: !!cozeResponse,
-        hasAsyncIterator: cozeResponse && typeof cozeResponse[Symbol.asyncIterator] === 'function',
-        responseType: typeof cozeResponse
+    if (!response.ok) {
+        throw new Error(`Coze API 调用失败: ${response.status} ${response.statusText}`);
+    }
+
+    const responseData = await response.json();
+    console.log(`[${jobId}] Coze API 调用成功，响应:`, {
+        hasData: !!responseData.data,
+        hasInfojson: !!responseData.data?.infojson,
+        dataKeys: responseData.data ? Object.keys(responseData.data) : []
     });
 
-    // 处理流式响应
-    let messageData = null;
-    let infojson = null;
-    let outData = '';
-    let progress = 20;
-    let chunkCount = 0;
+    // 直接处理响应数据，提取 infojson
+    const infojson = responseData.data?.infojson;
 
-    if (cozeResponse && typeof cozeResponse[Symbol.asyncIterator] === 'function') {
-        console.log(`[${jobId}] 开始处理流式数据...`);
-        for await (const chunk of cozeResponse) {
-            chunkCount++;
-            console.log(`[${jobId}] 收到第 ${chunkCount} 个数据块:`, {
-                event: chunk.event,
-                hasData: !!chunk.data,
-                dataType: typeof chunk.data
-            });
-
-            // 更新进度
-            progress = Math.min(progress + 5, 50);
-            await redis.set(`job:${jobId}`, {
-                status: 'processing',
-                progress: progress,
-                message: `正在处理 Coze 响应... (${chunk.event})`
-            });
-
-            if (chunk.event === 'Message' && chunk.data && chunk.data.content) {
-                try {
-                    console.log(`[${jobId}] 解析 Message 内容...`);
-                    const contentData = JSON.parse(chunk.data.content);
-                    console.log(`[${jobId}] Message 内容解析成功:`, {
-                        hasInfojson: !!contentData.infojson,
-                        hasOutData: !!contentData.outData,
-                        contentKeys: Object.keys(contentData)
-                    });
-
-                    if (contentData.infojson) {
-                        infojson = contentData.infojson;
-                        console.log(`[${jobId}] ✅ 成功提取到 infojson 数据`);
-                    }
-                    if (contentData.outData) {
-                        outData = contentData.outData;
-                        console.log(`[${jobId}] ✅ 成功提取到 outData`);
-                    }
-                    messageData = contentData;
-                } catch (e) {
-                    console.warn(`[${jobId}] ❌ 解析 Message content 失败:`, e);
-                    console.warn(`[${jobId}] 原始 content:`, chunk.data.content);
-                }
-            }
-
-            if (chunk.event === 'Done') {
-                console.log(`[${jobId}] 收到 Done 事件，流式处理结束`);
-                break;
-            }
-        }
-        console.log(`[${jobId}] 流式数据处理完成，共处理 ${chunkCount} 个数据块`);
+    if (!infojson) {
+        console.warn(`[${jobId}] ❌ 响应中没有找到 infojson 数据`);
+        console.log(`[${jobId}] 完整响应数据:`, responseData);
     } else {
-        console.log(`[${jobId}] ❌ 响应不是流式格式或为空`);
+        console.log(`[${jobId}] ✅ 成功提取到 infojson 数据`);
     }
 
     console.log(`[${jobId}] 构建最终结果...`);
     console.log(`[${jobId}] 数据提取结果:`, {
         hasInfojson: !!infojson,
-        hasOutData: !!outData,
-        hasMessageData: !!messageData,
-        outDataLength: outData ? outData.length : 0
+        infojsonKeys: infojson ? Object.keys(infojson) : []
     });
 
     const result = {
         success: true,
-        outData: outData || JSON.stringify(infojson, null, 2) || '处理完成',
+        outData: infojson ? JSON.stringify(infojson, null, 2) : '处理完成',
         infoJson: {
             timestamp: new Date().toISOString(),
             workflow_id: COZE_WORKFLOW_ID,
             input_length: input.length,
-            response_data: infojson || messageData,
-            api_method: 'stream',
+            response_data: infojson,
+            api_method: 'direct',
             extracted_infojson: infojson
         }
     };
@@ -647,8 +600,14 @@ async function generateDocument(workflowData, jobId) {
         message: '正在生成下载链接...'
     });
 
-    // 注意：这里需要调用本地的下载 API，而不是外部 URL
-    const downloadResponse = await fetch(`http://localhost:${PORT}/api/download`, {
+    // 调用本地的下载 API
+    const downloadUrl = process.env.NODE_ENV === 'production'
+        ? `${process.env.APP_URL || 'http://localhost:' + PORT}/api/download`
+        : `http://localhost:${PORT}/api/download`;
+
+    console.log(`[${jobId}] 调用下载 API:`, downloadUrl);
+
+    const downloadResponse = await fetch(downloadUrl, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

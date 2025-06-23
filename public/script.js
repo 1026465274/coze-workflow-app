@@ -14,8 +14,10 @@ const errorText = document.getElementById('error-text');
 let currentJobId = null;
 let statusCheckInterval = null;
 let statusCheckCount = 0;
+let initialDelayTimeout = null;
 const MAX_STATUS_CHECKS = 24; // 最多检查4分钟（24次 * 10秒）
 const POLLING_INTERVAL = 10000; // 10秒轮询间隔
+const INITIAL_DELAY = 60000; // 前1分钟不轮询
 
 // 表单提交事件监听
 form.addEventListener('submit', async (event) => {
@@ -327,31 +329,43 @@ async function generateDocumentAsync(workflowData) {
 
 // 开始状态轮询
 function startStatusPolling() {
+    // 清理之前的定时器
     if (statusCheckInterval) {
         clearInterval(statusCheckInterval);
+    }
+    if (initialDelayTimeout) {
+        clearTimeout(initialDelayTimeout);
     }
 
     statusCheckCount = 0; // 重置计数器
 
-    statusCheckInterval = setInterval(async () => {
-        try {
-            statusCheckCount++;
+    console.log('📅 状态轮询策略：前1分钟不查询，之后每10秒查询一次');
 
-            // 超时保护
-            if (statusCheckCount > MAX_STATUS_CHECKS) {
-                clearInterval(statusCheckInterval);
-                statusCheckInterval = null;
-                setLoadingState(false);
-                showError('任务处理超时（4分钟），请稍后重试或联系管理员 ⏰');
-                return;
+    // 前1分钟不查询，1分钟后开始轮询
+    initialDelayTimeout = setTimeout(() => {
+        console.log('⏰ 1分钟等待结束，开始状态轮询...');
+
+        statusCheckInterval = setInterval(async () => {
+            try {
+                statusCheckCount++;
+
+                // 超时保护
+                if (statusCheckCount > MAX_STATUS_CHECKS) {
+                    clearInterval(statusCheckInterval);
+                    statusCheckInterval = null;
+                    setLoadingState(false);
+                    showError('任务处理超时（4分钟），请稍后重试或联系管理员 ⏰');
+                    return;
+                }
+
+                console.log(`🔍 第 ${statusCheckCount} 次状态检查...`);
+                await checkJobStatus();
+            } catch (error) {
+                console.error('状态检查失败:', error);
+                // 继续轮询，不中断
             }
-
-            await checkJobStatus();
-        } catch (error) {
-            console.error('状态检查失败:', error);
-            // 继续轮询，不中断
-        }
-    }, POLLING_INTERVAL); // 每10秒检查一次
+        }, POLLING_INTERVAL); // 每10秒检查一次
+    }, INITIAL_DELAY); // 1分钟后开始
 }
 
 // 检查任务状态
@@ -410,7 +424,7 @@ function showTaskStatus(statusData) {
             <div class="status-details">
                 <p>任务 ID: ${statusData.jobId}</p>
                 <p>状态: <span class="status-badge ${statusData.status}">${getStatusText(statusData.status)}</span></p>
-                <p>检查间隔: 每10秒</p>
+                <p>轮询策略: 前1分钟不查询，之后每10秒查询</p>
                 <p>超时时间: 4分钟</p>
             </div>
         </div>
