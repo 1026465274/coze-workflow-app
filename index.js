@@ -15,8 +15,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 初始化 Redis
-const redis = Redis.fromEnv();
+// 初始化 Redis - 使用 Upstash Redis
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 // 中间件设置
 app.use(cors());
