@@ -15,9 +15,12 @@ let currentJobId = null;
 let statusCheckInterval = null;
 let statusCheckCount = 0;
 let initialDelayTimeout = null;
+let buttonTimeoutId = null;
+let isTaskRunning = false;
 const MAX_STATUS_CHECKS = 24; // 最多检查4分钟（24次 * 10秒）
 const POLLING_INTERVAL = 10000; // 10秒轮询间隔
 const INITIAL_DELAY = 60000; // 前1分钟不轮询
+const BUTTON_TIMEOUT = 180000; // 3分钟后重新启用按钮
 
 // 表单提交事件监听
 form.addEventListener('submit', async (event) => {
@@ -26,11 +29,20 @@ form.addEventListener('submit', async (event) => {
     console.log('用户输入:', userInput.value);
     const inputValue = userInput.value.trim();
 
+    // 检查是否有任务正在运行
+    if (isTaskRunning) {
+        showError('有任务正在进行中，请稍候或等待3分钟后重试~ 🕐');
+        return;
+    }
+
     // 输入验证
     if (!inputValue) {
         showError('请告诉我你的愿望哦~ 💕');
         return;
     }
+
+    // 清理之前的状态
+    cleanupTaskState();
 
     // 开始处理
     setLoadingState(true);
@@ -62,6 +74,7 @@ form.addEventListener('submit', async (event) => {
         console.error('💔 魔法施展失败:', error);
         showError(`魔法失败了呢~ ${error.message} 😢`);
         setLoadingState(false);
+        setTaskRunningState(false); // 确保按钮状态重置
     }
 });
 
@@ -102,6 +115,10 @@ async function startAsyncWorkflow(inputValue) {
 
         console.log('✅ 任务已启动:', startData);
 
+        // 设置按钮为任务运行状态
+        setTaskRunningState(true);
+        setLoadingState(false); // 停止初始加载状态
+
         // 显示任务启动状态
         showTaskStatus({
             status: 'pending',
@@ -131,17 +148,112 @@ function setLoadingState(isLoading) {
     }
 }
 
+// 设置按钮为任务运行状态
+function setTaskRunningState(isRunning) {
+    isTaskRunning = isRunning;
+
+    if (isRunning) {
+        submitBtn.disabled = true;
+        btnText.textContent = '任务进行中，请稍候...';
+        loadingSpinner.style.display = 'block';
+
+        // 设置3分钟超时，之后重新启用按钮
+        buttonTimeoutId = setTimeout(() => {
+            console.log('⏰ 3分钟超时，重新启用按钮');
+            enableButtonAfterTimeout();
+        }, BUTTON_TIMEOUT);
+
+    } else {
+        // 清除超时定时器
+        if (buttonTimeoutId) {
+            clearTimeout(buttonTimeoutId);
+            buttonTimeoutId = null;
+        }
+
+        submitBtn.disabled = false;
+        btnText.textContent = '施展魔法';
+        loadingSpinner.style.display = 'none';
+    }
+}
+
+// 超时后启用按钮
+function enableButtonAfterTimeout() {
+    isTaskRunning = false;
+
+    if (buttonTimeoutId) {
+        clearTimeout(buttonTimeoutId);
+        buttonTimeoutId = null;
+    }
+
+    submitBtn.disabled = false;
+    btnText.textContent = '施展魔法';
+    loadingSpinner.style.display = 'none';
+
+    // 显示超时提示
+    showError('任务处理时间较长，按钮已重新启用。您可以重新提交或等待当前任务完成。⏰');
+}
+
+// 清理所有定时器和状态
+function cleanupTaskState() {
+    // 清理轮询定时器
+    if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+        statusCheckInterval = null;
+    }
+
+    // 清理初始延迟定时器
+    if (initialDelayTimeout) {
+        clearTimeout(initialDelayTimeout);
+        initialDelayTimeout = null;
+    }
+
+    // 清理按钮超时定时器
+    if (buttonTimeoutId) {
+        clearTimeout(buttonTimeoutId);
+        buttonTimeoutId = null;
+    }
+
+    // 重置状态
+    isTaskRunning = false;
+    statusCheckCount = 0;
+    currentJobId = null;
+}
+
 // 显示结果
 function displayResults(data) {
-    // 显示 outData
-    if (data.outData !== undefined) {
-        // 如果 outData 是 JSON 格式的 infojson，美化显示
-        if (data.infoJson && data.infoJson.extracted_infojson && data.outData.includes('{')) {
+    console.log('📊 显示结果数据:', data);
+
+    // 优先显示 infojson 数据（主要内容）
+    if (data.infoJson && data.infoJson.extracted_infojson) {
+        const infojsonData = data.infoJson.extracted_infojson;
+        console.log('📋 提取到的 infojson 数据:', infojsonData);
+
+        // 创建美化的 infojson 显示
+        outDataContainer.innerHTML = `
+            <div class="infojson-display">
+                <h4>📋 提取的客户信息</h4>
+                <div class="infojson-grid">
+                    ${Object.entries(infojsonData).map(([key, value]) => `
+                        <div class="info-item">
+                            <span class="info-key">${key}:</span>
+                            <span class="info-value">${value || '未填写'}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <details class="raw-json">
+                    <summary>查看原始 JSON 数据</summary>
+                    <pre>${JSON.stringify(infojsonData, null, 2)}</pre>
+                </details>
+            </div>
+        `;
+    } else if (data.outData !== undefined) {
+        // 备用显示 outData
+        if (data.outData.includes('{')) {
             try {
                 const parsedData = JSON.parse(data.outData);
                 outDataContainer.innerHTML = `
                     <div class="infojson-display">
-                        <h4>📋 提取的信息 (infojson)</h4>
+                        <h4>📋 提取的信息</h4>
                         <pre>${JSON.stringify(parsedData, null, 2)}</pre>
                     </div>
                 `;
@@ -155,21 +267,11 @@ function displayResults(data) {
         outDataContainer.textContent = '魔法还在准备中呢~ 🌟';
     }
 
-    // 显示 infoJson
+    // 显示技术详情 (infoJson)
     if (data.infoJson) {
         try {
-            // 如果有提取的 infojson，优先显示
-            if (data.infoJson.extracted_infojson) {
-                const displayData = {
-                    ...data.infoJson,
-                    主要数据: data.infoJson.extracted_infojson
-                };
-                const formattedJson = JSON.stringify(displayData, null, 2);
-                infoJsonContainer.textContent = formattedJson;
-            } else {
-                const formattedJson = JSON.stringify(data.infoJson, null, 2);
-                infoJsonContainer.textContent = formattedJson;
-            }
+            const formattedJson = JSON.stringify(data.infoJson, null, 2);
+            infoJsonContainer.textContent = formattedJson;
         } catch (error) {
             infoJsonContainer.textContent = '魔法详情格式化失败了~ 😢';
         }
@@ -177,17 +279,47 @@ function displayResults(data) {
         infoJsonContainer.textContent = '暂时没有魔法详情哦~ ✨';
     }
 
-    // 添加文档生成状态区域
-    addDocumentGenerationStatus();
-    
+    // 如果有下载链接，直接显示下载按钮
+    if (data.downloadUrl) {
+        console.log('🔗 发现下载链接:', data.downloadUrl);
+        addDownloadSection(data.downloadUrl, data.fileName);
+    } else {
+        // 没有下载链接时，显示文档生成状态
+        addDocumentGenerationStatus();
+    }
+
     // 显示结果区域
     resultsSection.style.display = 'block';
-    
+
     // 滚动到结果区域
-    resultsSection.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
+    resultsSection.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
     });
+}
+
+// 添加下载区域
+function addDownloadSection(downloadUrl, fileName) {
+    const downloadSection = document.createElement('div');
+    downloadSection.className = 'download-section';
+    downloadSection.innerHTML = `
+        <h3 class="status-title">📄 文档已生成</h3>
+        <div class="download-content">
+            <p>您的魔法文档已经准备好了！✨</p>
+            <a href="${downloadUrl}"
+               class="download-btn"
+               download="${fileName || 'workflow_result.docx'}"
+               target="_blank">
+                📄 下载魔法文档
+            </a>
+            <p class="download-info">
+                生成时间: ${new Date().toLocaleString()}
+            </p>
+        </div>
+    `;
+
+    // 添加到结果区域
+    resultsSection.appendChild(downloadSection);
 }
 
 // 显示错误信息
@@ -354,6 +486,7 @@ function startStatusPolling() {
                     clearInterval(statusCheckInterval);
                     statusCheckInterval = null;
                     setLoadingState(false);
+                    setTaskRunningState(false); // 重置按钮状态
                     showError('任务处理超时（4分钟），请稍后重试或联系管理员 ⏰');
                     return;
                 }
@@ -400,10 +533,14 @@ async function checkJobStatus() {
         clearInterval(statusCheckInterval);
         statusCheckInterval = null;
         setLoadingState(false);
+        setTaskRunningState(false); // 重置按钮状态
 
         if (statusData.status === 'completed') {
             // 显示完成结果
             displayResults(statusData.result);
+        } else if (statusData.status === 'failed') {
+            // 显示失败信息
+            showError(`任务处理失败: ${statusData.error || '未知错误'} 😢`);
         }
     }
 }

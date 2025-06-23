@@ -349,6 +349,88 @@ body::before {
     color: #8b4b8b;
 }
 
+/* infojson 显示样式 */
+.infojson-display {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 15px;
+    padding: 20px;
+    border-left: 4px solid #ff69b4;
+}
+
+.infojson-display h4 {
+    color: #d63384;
+    margin-bottom: 20px;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.infojson-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.info-item {
+    background: rgba(255, 240, 245, 0.8);
+    border-radius: 10px;
+    padding: 12px 15px;
+    border-left: 3px solid #ff69b4;
+    transition: all 0.3s ease;
+}
+
+.info-item:hover {
+    background: rgba(255, 240, 245, 1);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(255, 105, 180, 0.2);
+}
+
+.info-key {
+    font-weight: 600;
+    color: #d63384;
+    display: block;
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+}
+
+.info-value {
+    color: #4a4a4a;
+    font-size: 1rem;
+    word-wrap: break-word;
+}
+
+.raw-json {
+    margin-top: 20px;
+    border: 1px solid rgba(255, 182, 193, 0.4);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.raw-json summary {
+    background: rgba(255, 182, 193, 0.2);
+    padding: 10px 15px;
+    cursor: pointer;
+    font-weight: 500;
+    color: #d63384;
+    transition: background 0.3s ease;
+}
+
+.raw-json summary:hover {
+    background: rgba(255, 182, 193, 0.3);
+}
+
+.raw-json pre {
+    background: rgba(255, 255, 255, 0.9);
+    padding: 15px;
+    margin: 0;
+    font-size: 0.85rem;
+    color: #6b4c7a;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
 /* 下载区域样式 */
 .download-section {
     background: rgba(255, 255, 255, 0.9);

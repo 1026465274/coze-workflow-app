@@ -389,48 +389,35 @@ async function processBackgroundTask(jobId, input) {
             console.log(`[${jobId}] 继续处理文档生成...`);
         }
 
-        // 处理文档生成
-        let documentResult = null;
-        console.log(`[${jobId}] 检查是否需要生成文档...`);
-        console.log(`[${jobId}] workflowResult.infoJson:`, !!workflowResult.infoJson);
-        console.log(`[${jobId}] extracted_infojson:`, !!workflowResult.infoJson?.extracted_infojson);
+        // Coze 已经直接返回下载链接，不需要额外生成文档
+        console.log(`[${jobId}] Coze 工作流已完成，检查返回的下载链接...`);
+        console.log(`[${jobId}] 下载链接:`, workflowResult.downloadUrl);
 
-        if (workflowResult.infoJson && workflowResult.infoJson.extracted_infojson) {
-            try {
-                console.log(`[${jobId}] 开始生成文档...`);
-                documentResult = await generateDocument(workflowResult.infoJson.extracted_infojson, jobId);
-                console.log(`[${jobId}] 文档生成成功:`, {
-                    hasDocId: !!documentResult?.docId,
-                    hasDownloadUrl: !!documentResult?.downloadUrl,
-                    fileName: documentResult?.fileName
-                });
-
-                await redis.set(`job:${jobId}`, {
-                    status: 'processing',
-                    progress: 90,
-                    message: '文档生成完成，正在整理结果...'
-                });
-            } catch (docError) {
-                console.error(`[${jobId}] 文档生成失败:`, docError);
-                console.error(`[${jobId}] 文档生成错误堆栈:`, docError.stack);
-                // 文档生成失败不影响主流程
-            }
-        } else {
-            console.log(`[${jobId}] 跳过文档生成：没有 extracted_infojson 数据`);
+        // 更新进度到 90%
+        try {
+            await redis.set(`job:${jobId}`, {
+                status: 'processing',
+                progress: 90,
+                message: '正在整理结果...'
+            });
+        } catch (updateError) {
+            console.error(`[${jobId}] ❌ 进度更新失败:`, updateError.message);
         }
 
-        // 完成
+        // 完成 - 使用 Coze 直接返回的结果
         const finalResult = {
             ...workflowResult,
-            documentResult
+            // 如果 Coze 返回了下载链接，添加到结果中
+            downloadUrl: workflowResult.downloadUrl,
+            fileName: workflowResult.downloadUrl ? `workflow_result_${Date.now()}.docx` : null
         };
 
         console.log(`[${jobId}] 准备更新最终状态为 completed...`);
         console.log(`[${jobId}] 最终结果摘要:`, {
             hasWorkflowResult: !!workflowResult,
-            hasDocumentResult: !!documentResult,
             workflowSuccess: workflowResult?.success,
-            documentHasDownloadUrl: !!documentResult?.downloadUrl
+            hasDownloadUrl: !!workflowResult.downloadUrl,
+            hasInfojson: !!workflowResult.infoJson?.extracted_infojson
         });
 
         // 最终状态更新 - 添加超时保护
@@ -524,32 +511,63 @@ async function executeCozeWorkflow(input, jobId) {
         dataKeys: responseData.data ? Object.keys(responseData.data) : []
     });
 
-    // 直接处理响应数据，提取 infojson
-    const infojson = responseData.data?.infojson;
+    // 解析 Coze 返回的数据
+    let parsedData = null;
+    let infojson = null;
+    let downloadUrl = null;
+
+    try {
+        // responseData.data 是一个字符串，需要解析
+        if (typeof responseData.data === 'string') {
+            parsedData = JSON.parse(responseData.data);
+        } else {
+            parsedData = responseData.data;
+        }
+
+        infojson = parsedData.infojson;
+
+        // 检查是否有 outData 包含 downloadUrl
+        if (parsedData.outData) {
+            if (typeof parsedData.outData === 'string') {
+                const outDataParsed = JSON.parse(parsedData.outData);
+                downloadUrl = outDataParsed.downloadUrl;
+            } else {
+                downloadUrl = parsedData.outData.downloadUrl;
+            }
+        }
+
+        console.log(`[${jobId}] ✅ 数据解析成功:`, {
+            hasInfojson: !!infojson,
+            hasDownloadUrl: !!downloadUrl,
+            infojsonKeys: infojson ? Object.keys(infojson) : [],
+            downloadUrl: downloadUrl
+        });
+
+    } catch (parseError) {
+        console.error(`[${jobId}] ❌ 解析 Coze 响应数据失败:`, parseError);
+        console.log(`[${jobId}] 原始数据:`, responseData.data);
+        throw new Error('解析 Coze 响应数据失败');
+    }
 
     if (!infojson) {
         console.warn(`[${jobId}] ❌ 响应中没有找到 infojson 数据`);
-        console.log(`[${jobId}] 完整响应数据:`, responseData);
-    } else {
-        console.log(`[${jobId}] ✅ 成功提取到 infojson 数据`);
+        console.log(`[${jobId}] 解析后的数据:`, parsedData);
     }
 
     console.log(`[${jobId}] 构建最终结果...`);
-    console.log(`[${jobId}] 数据提取结果:`, {
-        hasInfojson: !!infojson,
-        infojsonKeys: infojson ? Object.keys(infojson) : []
-    });
 
     const result = {
         success: true,
         outData: infojson ? JSON.stringify(infojson, null, 2) : '处理完成',
+        downloadUrl: downloadUrl, // 直接使用 Coze 返回的下载链接
         infoJson: {
             timestamp: new Date().toISOString(),
             workflow_id: COZE_WORKFLOW_ID,
             input_length: input.length,
             response_data: infojson,
             api_method: 'direct',
-            extracted_infojson: infojson
+            extracted_infojson: infojson,
+            download_url: downloadUrl
         }
     };
 
