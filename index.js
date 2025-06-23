@@ -517,22 +517,35 @@ async function executeCozeWorkflow(input, jobId) {
     let downloadUrl = null;
 
     try {
+        console.log(`[${jobId}] 开始解析 Coze 响应数据...`);
+        console.log(`[${jobId}] responseData.data 类型:`, typeof responseData.data);
+        console.log(`[${jobId}] responseData.data 内容:`, responseData.data);
+
         // responseData.data 是一个字符串，需要解析
         if (typeof responseData.data === 'string') {
+            console.log(`[${jobId}] 解析 JSON 字符串...`);
             parsedData = JSON.parse(responseData.data);
         } else {
+            console.log(`[${jobId}] 数据已经是对象格式`);
             parsedData = responseData.data;
         }
+
+        console.log(`[${jobId}] 解析后的数据:`, parsedData);
+        console.log(`[${jobId}] parsedData.infojson:`, parsedData.infojson);
 
         infojson = parsedData.infojson;
 
         // 检查是否有 outData 包含 downloadUrl
         if (parsedData.outData) {
+            console.log(`[${jobId}] 发现 outData:`, parsedData.outData);
             if (typeof parsedData.outData === 'string') {
+                console.log(`[${jobId}] 解析 outData JSON 字符串...`);
                 const outDataParsed = JSON.parse(parsedData.outData);
                 downloadUrl = outDataParsed.downloadUrl;
+                console.log(`[${jobId}] 从 outData 提取到 downloadUrl:`, downloadUrl);
             } else {
                 downloadUrl = parsedData.outData.downloadUrl;
+                console.log(`[${jobId}] 直接从 outData 对象获取 downloadUrl:`, downloadUrl);
             }
         }
 
@@ -545,7 +558,8 @@ async function executeCozeWorkflow(input, jobId) {
 
     } catch (parseError) {
         console.error(`[${jobId}] ❌ 解析 Coze 响应数据失败:`, parseError);
-        console.log(`[${jobId}] 原始数据:`, responseData.data);
+        console.log(`[${jobId}] 原始 responseData:`, responseData);
+        console.log(`[${jobId}] 原始 responseData.data:`, responseData.data);
         throw new Error('解析 Coze 响应数据失败');
     }
 
