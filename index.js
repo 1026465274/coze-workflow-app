@@ -125,8 +125,22 @@ app.get('/api/check-status', async (req, res) => {
             status: jobData?.status,
             progress: jobData?.progress,
             message: jobData?.message,
+            hasResult: !!jobData?.result,
+            hasDownloadUrl: !!jobData?.downloadUrl,
+            hasInfojson: !!jobData?.infojson,
             dataKeys: jobData ? Object.keys(jobData) : []
         });
+
+        // 如果有结果数据，打印详细信息
+        if (jobData?.result) {
+            console.log(`[${jobId}] 结果数据详情:`, {
+                resultType: typeof jobData.result,
+                resultKeys: Object.keys(jobData.result),
+                hasWorkflowResult: !!jobData.result.success,
+                hasDownloadUrl: !!jobData.result.downloadUrl,
+                hasInfoJson: !!jobData.result.infoJson
+            });
+        }
 
         if (!jobData) {
             return res.status(404).json({
@@ -420,15 +434,31 @@ async function processBackgroundTask(jobId, input) {
             hasInfojson: !!workflowResult.infoJson?.extracted_infojson
         });
 
+        // 构建要保存的完整数据
+        const finalJobData = {
+            status: 'completed',
+            progress: 100,
+            message: '任务完成',
+            result: finalResult,
+            completedTime: new Date().toISOString(),
+            // 添加直接访问的字段，方便前端使用
+            downloadUrl: workflowResult.downloadUrl,
+            fileName: workflowResult.fileName,
+            infojson: workflowResult.infoJson?.extracted_infojson
+        };
+
+        console.log(`[${jobId}] 准备保存的完整数据:`, {
+            status: finalJobData.status,
+            progress: finalJobData.progress,
+            hasResult: !!finalJobData.result,
+            hasDownloadUrl: !!finalJobData.downloadUrl,
+            hasInfojson: !!finalJobData.infojson,
+            resultKeys: finalJobData.result ? Object.keys(finalJobData.result) : []
+        });
+
         // 最终状态更新 - 添加超时保护
         try {
-            const finalUpdateOperation = redis.set(`job:${jobId}`, {
-                status: 'completed',
-                progress: 100,
-                message: '任务完成',
-                result: finalResult,
-                completedTime: new Date().toISOString()
-            });
+            const finalUpdateOperation = redis.set(`job:${jobId}`, finalJobData);
 
             const timeoutPromise = new Promise((_, reject) => {
                 setTimeout(() => reject(new Error('最终状态更新超时')), 5000);
@@ -436,8 +466,24 @@ async function processBackgroundTask(jobId, input) {
 
             await Promise.race([finalUpdateOperation, timeoutPromise]);
             console.log(`[${jobId}] ✅ 最终状态更新成功`);
+
+            // 验证保存是否成功
+            try {
+                const savedData = await redis.get(`job:${jobId}`);
+                console.log(`[${jobId}] 验证保存结果:`, {
+                    hasSavedData: !!savedData,
+                    savedStatus: savedData?.status,
+                    savedProgress: savedData?.progress,
+                    hasResult: !!savedData?.result,
+                    hasDownloadUrl: !!savedData?.downloadUrl
+                });
+            } catch (verifyError) {
+                console.error(`[${jobId}] 验证保存结果失败:`, verifyError);
+            }
+
         } catch (finalUpdateError) {
             console.error(`[${jobId}] ❌ 最终状态更新失败:`, finalUpdateError.message);
+            console.error(`[${jobId}] 错误详情:`, finalUpdateError);
         }
 
         console.log(`[${jobId}] ===== 后台处理完成 =====`);
